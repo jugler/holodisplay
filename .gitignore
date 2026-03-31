@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+config.toml
 node_modules/
 .DS_Store
 venv/

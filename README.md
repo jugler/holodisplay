@@ -30,11 +30,10 @@ Dependencias del sistema:
 ## Bajar el proyecto
 
 ```bash
-git clone <URL_DEL_REPO>
+git clone git@github.com:jugler/holodisplay.git
 cd HoloDisplay
 ```
 
-Si el repo ya existe en GitHub o en otro remoto, sustituye `<URL_DEL_REPO>` por la URL real.
 
 ## Instalacion
 
@@ -64,9 +63,22 @@ sudo apt install fbi
 
 ## Configuracion
 
-La configuracion se lee desde [`config.toml`](/Users/jugler/code/HoloDisplay/config.toml).
+La configuracion real se lee desde `config.toml`, pero ese archivo no debe subirse a git.
 
-Ejemplo:
+Primero crea tu copia local a partir de la plantilla:
+
+```bash
+cp config.example.toml config.toml
+```
+
+Despues edita `config.toml` con tu URL y tu API key de Immich.
+
+Archivos:
+
+- [`config.example.toml`](/Users/jugler/code/HoloDisplay/config.example.toml): plantilla versionada sin secretos
+- `config.toml`: archivo local real, ignorado por git
+
+Ejemplo de `config.toml`:
 
 ```toml
 [immich]
@@ -301,7 +313,7 @@ El destino por defecto esta definido en [`deploy.sh`](/Users/jugler/code/HoloDis
 
 ## Notas
 
-- `config.toml` contiene datos sensibles como la API key. Conviene no subir credenciales reales a un repo publico.
+- `config.toml` contiene datos sensibles como la API key y ahora esta ignorado por git.
 - En `memories`, la ubicacion puede requerir una consulta extra por asset porque la respuesta de `/memories` puede venir resumida.
 - Los videos no estan soportados como parte del flujo visual actual.
 

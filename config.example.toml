@@ -1,0 +1,33 @@
+[immich]
+url = "http://immich.local:2283/api"
+api_key = "REEMPLAZA_CON_TU_API_KEY"
+
+[display]
+pics_dir = "/home/pi/HoloDisplay/pics"
+screen_width = 1920
+screen_height = 1080
+backend = "pygame"
+seconds = 15
+show_person_overlay = true
+# overlay_layout:
+# split = nombres arriba izquierda + ano abajo derecha
+# mirrored = nombres arriba derecha + ano abajo izquierda
+# right = alias legacy de mirrored
+overlay_layout = "split"
+transition_ms = 700
+
+[search]
+# modes soportados: person, smart, memories, random
+mode = "random"
+# si mode = "smart", descomenta y ajusta esta linea:
+# smart_query = "beach"
+default_people = ["Jesus"]
+search_size = 1000
+seen_buffer_size = 100
+
+[persons]
+Jesus = "PERSON_ID_DE_IMMICH"
+Ismael = "PERSON_ID_DE_IMMICH"
+Vero = "PERSON_ID_DE_IMMICH"
+Joel = "PERSON_ID_DE_IMMICH"
+Gaby = "PERSON_ID_DE_IMMICH"
