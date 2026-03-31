@@ -8,7 +8,7 @@ El proyecto puede:
 - hacer smart search
 - mostrar memorias de `on_this_day`
 - mostrar fotos random
-- pintar overlays con ano, personas y ubicacion
+- pintar overlays con año, personas y ubicacion
 - recargar `config.toml` automaticamente sin reiniciar el servicio
 
 ## Requisitos
