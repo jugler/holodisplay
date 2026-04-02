@@ -25,6 +25,8 @@ class FileConfig:
     display_backend: str
     show_person_overlay: bool
     overlay_layout: str
+    year_overlay_font_size: int | None
+    info_overlay_font_size: int | None
     transition_ms: int
     search_size: int
     seen_buffer_size: int
@@ -43,6 +45,8 @@ class AppConfig:
     display_backend: str
     show_person_overlay: bool
     overlay_layout: str
+    year_overlay_font_size: int | None
+    info_overlay_font_size: int | None
     pics_dir: Path
     screen_width: int
     screen_height: int
@@ -142,6 +146,16 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
             {"split", "mirrored", "right"},
             "split",
         ),
+        year_overlay_font_size=_optional_positive_int(
+            display,
+            "year_overlay_font_size",
+            "display.year_overlay_font_size",
+        ),
+        info_overlay_font_size=_optional_positive_int(
+            display,
+            "info_overlay_font_size",
+            "display.info_overlay_font_size",
+        ),
         transition_ms=_require_int(
             display,
             "transition_ms",
@@ -222,6 +236,19 @@ def _require_choice(
     if value not in choices:
         options = ", ".join(sorted(choices))
         raise ValueError(f"{label} debe ser uno de: {options}")
+    return value
+
+
+def _optional_positive_int(
+    data: dict[str, object],
+    key: str,
+    label: str,
+) -> int | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{label} debe ser un numero entero positivo")
     return value
 
 

@@ -2,7 +2,7 @@
 
 set -e
 
-REMOTE_HOST="pi@frame"
+REMOTE_HOST="pi@holodisplay"
 REMOTE_DIR="~/HoloDisplay"
 
 ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"

@@ -247,8 +247,11 @@ class SlideshowApp:
         self.processor = ImageProcessor(
             screen_width=new_config.screen_width,
             screen_height=new_config.screen_height,
+            year_overlay_font_size=new_config.year_overlay_font_size,
+            info_overlay_font_size=new_config.info_overlay_font_size,
         )
-        self.display = self.display_builder(new_config)
+        if self._requires_display_rebuild(previous_config, new_config):
+            self.display = self.display_builder(new_config)
         self.config.pics_dir.mkdir(parents=True, exist_ok=True)
 
         with self.state_lock:
@@ -260,6 +263,18 @@ class SlideshowApp:
         print("Modo anterior:", previous_config.search_mode)
         print("Modo nuevo:", new_config.search_mode)
         self._print_config_summary()
+
+    def _requires_display_rebuild(
+        self,
+        previous_config: AppConfig,
+        new_config: AppConfig,
+    ) -> bool:
+        return (
+            previous_config.display_backend != new_config.display_backend
+            or previous_config.screen_width != new_config.screen_width
+            or previous_config.screen_height != new_config.screen_height
+            or previous_config.transition_ms != new_config.transition_ms
+        )
 
     def _print_config_summary(self) -> None:
         self.config.pics_dir.mkdir(parents=True, exist_ok=True)

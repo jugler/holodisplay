@@ -6,9 +6,17 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 class ImageProcessor:
-    def __init__(self, screen_width: int, screen_height: int) -> None:
+    def __init__(
+        self,
+        screen_width: int,
+        screen_height: int,
+        year_overlay_font_size: int | None = None,
+        info_overlay_font_size: int | None = None,
+    ) -> None:
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.year_overlay_font_size = year_overlay_font_size
+        self.info_overlay_font_size = info_overlay_font_size
 
     def prepare(
         self,
@@ -97,8 +105,8 @@ class ImageProcessor:
         font = self._load_info_font()
         padding_x = max(14, self.screen_width // 70)
         padding_y = max(10, self.screen_height // 90)
-        line_gap = max(6, self.screen_height // 180)
-        margin_top = max(20, self.screen_height // 36)
+        line_gap = max(12, self.screen_height // 90)
+        margin_top = max(56, self.screen_height // 12)
         margin_left = max(20, self.screen_width // 40)
 
         line_boxes = [draw.textbbox((0, 0), line, font=font) for line in info_lines]
@@ -161,7 +169,7 @@ class ImageProcessor:
         return background
 
     def _load_overlay_font(self) -> ImageFont.ImageFont:
-        font_size = max(30, self.screen_height // 18)
+        font_size = self.year_overlay_font_size or max(30, self.screen_height // 18)
         font_candidates = (
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/Library/Fonts/Arial Bold.ttf",
@@ -175,7 +183,7 @@ class ImageProcessor:
         return ImageFont.load_default()
 
     def _load_info_font(self) -> ImageFont.ImageFont:
-        font_size = max(18, self.screen_height // 32)
+        font_size = self.info_overlay_font_size or max(18, self.screen_height // 32)
         font_candidates = (
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/Library/Fonts/Arial.ttf",
