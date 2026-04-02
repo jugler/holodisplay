@@ -14,6 +14,9 @@ show_person_overlay = true
 # mirrored = nombres arriba derecha + ano abajo izquierda
 # right = alias legacy de mirrored
 overlay_layout = "split"
+# opcional: tamanos fijos de fuente para overlays
+# year_overlay_font_size = 42
+# info_overlay_font_size = 26
 transition_ms = 700
 
 [search]
