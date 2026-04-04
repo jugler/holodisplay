@@ -2,14 +2,31 @@
 
 set -e
 
-REMOTE_HOST="pi@holodisplay"
 REMOTE_DIR="~/HoloDisplay"
+PROJECT_DIR="/Users/jugler/code/HoloDisplay"
 
-ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"
-rsync -av \
-  --exclude '__pycache__' \
-  --exclude '*.pyc' \
-  /Users/jugler/code/HoloDisplay/HoloDisplay.py \
-  /Users/jugler/code/HoloDisplay/config.toml \
-  /Users/jugler/code/HoloDisplay/holo_display \
-  "$REMOTE_HOST:$REMOTE_DIR/"
+typeset -A HOST_CONFIGS
+HOST_CONFIGS=(
+  "pi@frame" "$PROJECT_DIR/config.frame.toml"
+  "pi@holodisplay" "$PROJECT_DIR/config.holodisplay.toml"
+)
+
+for REMOTE_HOST CONFIG_PATH in ${(kv)HOST_CONFIGS}; do
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "No existe el archivo de configuracion para $REMOTE_HOST: $CONFIG_PATH" >&2
+    exit 1
+  fi
+
+  echo "Deploy a $REMOTE_HOST usando $(basename "$CONFIG_PATH")"
+
+  ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"
+  rsync -av \
+    --exclude '__pycache__' \
+    --exclude '*.pyc' \
+    "$PROJECT_DIR/HoloDisplay.py" \
+    "$PROJECT_DIR/holo_display" \
+    "$REMOTE_HOST:$REMOTE_DIR/"
+  rsync -av \
+    "$CONFIG_PATH" \
+    "$REMOTE_HOST:$REMOTE_DIR/config.toml"
+done

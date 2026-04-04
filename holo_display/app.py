@@ -35,8 +35,13 @@ def main(argv: list[str] | None = None) -> int:
         processor=ImageProcessor(
             screen_width=config.screen_width,
             screen_height=config.screen_height,
+            grayscale=config.grayscale,
             year_overlay_font_size=config.year_overlay_font_size,
             info_overlay_font_size=config.info_overlay_font_size,
+            year_overlay_x=config.year_overlay_x,
+            year_overlay_y=config.year_overlay_y,
+            info_overlay_x=config.info_overlay_x,
+            info_overlay_y=config.info_overlay_y,
         ),
         display_builder=build_display,
         display=build_display(config),

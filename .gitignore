@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .env
 config.toml
+config.frame.toml
+config.holodisplay.toml
 node_modules/
 .DS_Store
 venv/

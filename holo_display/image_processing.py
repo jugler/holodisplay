@@ -10,13 +10,23 @@ class ImageProcessor:
         self,
         screen_width: int,
         screen_height: int,
+        grayscale: bool = False,
         year_overlay_font_size: int | None = None,
         info_overlay_font_size: int | None = None,
+        year_overlay_x: int | None = None,
+        year_overlay_y: int | None = None,
+        info_overlay_x: int | None = None,
+        info_overlay_y: int | None = None,
     ) -> None:
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.grayscale = grayscale
         self.year_overlay_font_size = year_overlay_font_size
         self.info_overlay_font_size = info_overlay_font_size
+        self.year_overlay_x = year_overlay_x
+        self.year_overlay_y = year_overlay_y
+        self.info_overlay_x = info_overlay_x
+        self.info_overlay_y = info_overlay_y
 
     def prepare(
         self,
@@ -30,6 +40,8 @@ class ImageProcessor:
             raise ValueError("vertical_image")
 
         image = self._compose_background(image, width, height)
+        if self.grayscale:
+            image = image.convert("L").convert("RGB")
         return image, (width, height)
 
     def add_memory_overlay(
@@ -52,18 +64,24 @@ class ImageProcessor:
         padding_x = max(10, self.screen_width // 90)
         padding_y = max(6, self.screen_height // 120)
         panel_height = text_height + (padding_y * 2)
-        panel_top = self.screen_height - panel_height - max(24, self.screen_height // 40)
+        panel_top = self.year_overlay_y
+        if panel_top is None:
+            panel_top = self.screen_height - panel_height - max(24, self.screen_height // 40)
         panel_bottom = panel_top + panel_height
-        margin_side = max(20, self.screen_width // 40)
-        if side == "left":
-            panel_left = margin_side
+        panel_left = self.year_overlay_x
+        if panel_left is not None:
             panel_right = panel_left + text_width + (padding_x * 2)
         else:
-            panel_right = self.screen_width - margin_side
-            panel_left = max(
-                margin_side,
-                panel_right - text_width - (padding_x * 2),
-            )
+            margin_side = max(20, self.screen_width // 40)
+            if side == "left":
+                panel_left = margin_side
+                panel_right = panel_left + text_width + (padding_x * 2)
+            else:
+                panel_right = self.screen_width - margin_side
+                panel_left = max(
+                    margin_side,
+                    panel_right - text_width - (padding_x * 2),
+                )
 
         draw.rounded_rectangle(
             (panel_left, panel_top, panel_right, panel_bottom),
@@ -85,17 +103,19 @@ class ImageProcessor:
         people: str | None,
         location: str | None,
         layout: str,
+        show_year: bool = True,
+        show_info: bool = True,
     ) -> Image.Image:
         is_mirrored = layout in {"mirrored", "right"}
         result = image
-        if year:
+        if show_year and year:
             result = self.add_memory_overlay(
                 result,
                 year,
                 side="left" if is_mirrored else "right",
             )
 
-        info_lines = [line for line in (people, location) if line]
+        info_lines = [line for line in (people, location) if line] if show_info else []
         if not info_lines:
             return result
 
@@ -117,13 +137,17 @@ class ImageProcessor:
         if len(info_lines) > 1:
             panel_height += line_gap * (len(info_lines) - 1)
 
-        if is_mirrored:
-            panel_right = self.screen_width - margin_left
-            panel_left = panel_right - panel_width
-        else:
-            panel_left = margin_left
+        panel_left = self.info_overlay_x
+        if panel_left is not None:
             panel_right = panel_left + panel_width
-        panel_top = margin_top
+        else:
+            if is_mirrored:
+                panel_right = self.screen_width - margin_left
+                panel_left = panel_right - panel_width
+            else:
+                panel_left = margin_left
+                panel_right = panel_left + panel_width
+        panel_top = self.info_overlay_y if self.info_overlay_y is not None else margin_top
         panel_bottom = panel_top + panel_height
 
         draw.rounded_rectangle(

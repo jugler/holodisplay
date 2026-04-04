@@ -23,10 +23,16 @@ class FileConfig:
     screen_height: int
     display_time: int
     display_backend: str
-    show_person_overlay: bool
+    grayscale: bool
+    show_year_overlay: bool
+    show_info_overlay: bool
     overlay_layout: str
     year_overlay_font_size: int | None
     info_overlay_font_size: int | None
+    year_overlay_x: int | None
+    year_overlay_y: int | None
+    info_overlay_x: int | None
+    info_overlay_y: int | None
     transition_ms: int
     search_size: int
     seen_buffer_size: int
@@ -43,10 +49,16 @@ class AppConfig:
     api_key: str
     display_time: int
     display_backend: str
-    show_person_overlay: bool
+    grayscale: bool
+    show_year_overlay: bool
+    show_info_overlay: bool
     overlay_layout: str
     year_overlay_font_size: int | None
     info_overlay_font_size: int | None
+    year_overlay_x: int | None
+    year_overlay_y: int | None
+    info_overlay_x: int | None
+    info_overlay_y: int | None
     pics_dir: Path
     screen_width: int
     screen_height: int
@@ -133,10 +145,22 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
             "display.backend",
             DEFAULT_DISPLAY_BACKEND,
         ),
-        show_person_overlay=_require_bool(
+        grayscale=_require_bool(
             display,
-            "show_person_overlay",
-            "display.show_person_overlay",
+            "grayscale",
+            "display.grayscale",
+            False,
+        ),
+        show_year_overlay=_require_bool(
+            display,
+            "show_year_overlay",
+            "display.show_year_overlay",
+            True,
+        ),
+        show_info_overlay=_require_bool(
+            display,
+            "show_info_overlay",
+            "display.show_info_overlay",
             True,
         ),
         overlay_layout=_require_choice(
@@ -155,6 +179,26 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
             display,
             "info_overlay_font_size",
             "display.info_overlay_font_size",
+        ),
+        year_overlay_x=_optional_non_negative_int(
+            display,
+            "year_overlay_x",
+            "display.year_overlay_x",
+        ),
+        year_overlay_y=_optional_non_negative_int(
+            display,
+            "year_overlay_y",
+            "display.year_overlay_y",
+        ),
+        info_overlay_x=_optional_non_negative_int(
+            display,
+            "info_overlay_x",
+            "display.info_overlay_x",
+        ),
+        info_overlay_y=_optional_non_negative_int(
+            display,
+            "info_overlay_y",
+            "display.info_overlay_y",
         ),
         transition_ms=_require_int(
             display,
@@ -249,6 +293,19 @@ def _optional_positive_int(
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{label} debe ser un numero entero positivo")
+    return value
+
+
+def _optional_non_negative_int(
+    data: dict[str, object],
+    key: str,
+    label: str,
+) -> int | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{label} debe ser un numero entero mayor o igual a 0")
     return value
 
 

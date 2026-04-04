@@ -8,7 +8,11 @@ screen_width = 1920
 screen_height = 1080
 backend = "pygame"
 seconds = 15
-show_person_overlay = true
+grayscale = false
+# overlay del ano de la foto
+show_year_overlay = true
+# overlay superior con personas y/o ubicacion
+show_info_overlay = true
 # overlay_layout:
 # split = nombres arriba izquierda + ano abajo derecha
 # mirrored = nombres arriba derecha + ano abajo izquierda
@@ -17,6 +21,12 @@ overlay_layout = "split"
 # opcional: tamanos fijos de fuente para overlays
 # year_overlay_font_size = 42
 # info_overlay_font_size = 26
+# opcional: posicion fija del overlay del ano
+# year_overlay_x = 1600
+# year_overlay_y = 920
+# opcional: posicion fija del overlay de informacion
+# info_overlay_x = 20
+# info_overlay_y = 80
 transition_ms = 700
 
 [search]

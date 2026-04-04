@@ -83,7 +83,10 @@ class SlideshowApp:
     def _next_asset(self) -> dict | None:
         with self.state_lock:
             if not self.asset_buffer:
-                self.asset_buffer = deque(self.client.fetch_assets())
+                fetched_assets = self.client.fetch_assets()
+                if self._should_reset_seen(fetched_assets):
+                    self.seen.clear()
+                self.asset_buffer = deque(fetched_assets)
 
             if not self.asset_buffer:
                 return None
@@ -129,14 +132,20 @@ class SlideshowApp:
                     people=None,
                     location=self._asset_location_label(overlay_asset),
                     layout=self.config.overlay_layout,
+                    show_year=self.config.show_year_overlay,
+                    show_info=self.config.show_info_overlay,
                 )
-            elif self.config.search_mode in {"person", "random"} and self.config.show_person_overlay:
+            elif self.config.search_mode in {"person", "random"} and (
+                self.config.show_year_overlay or self.config.show_info_overlay
+            ):
                 image = self.processor.add_person_overlay(
                     image,
                     year=self._memory_year(overlay_asset),
                     people=self._asset_people_label(overlay_asset),
                     location=self._asset_location_label(overlay_asset),
                     layout=self.config.overlay_layout,
+                    show_year=self.config.show_year_overlay,
+                    show_info=self.config.show_info_overlay,
                 )
 
             return PreparedFrame(
@@ -157,6 +166,24 @@ class SlideshowApp:
             return
         with self.state_lock:
             self.seen.append(asset_id)
+
+    def _should_reset_seen(self, assets: list[dict]) -> bool:
+        if self.config.search_mode == "memories":
+            return False
+        if not assets or not self.seen:
+            return False
+
+        asset_ids = [
+            asset_id
+            for asset in assets
+            if isinstance(asset, dict)
+            for asset_id in [asset.get("id")]
+            if isinstance(asset_id, str) and asset_id
+        ]
+        if not asset_ids:
+            return False
+
+        return all(asset_id in self.seen for asset_id in asset_ids)
 
     def _print_asset_info(self, asset: dict, width: int, height: int) -> None:
         filename = asset.get("originalFileName", "unknown")
@@ -247,8 +274,13 @@ class SlideshowApp:
         self.processor = ImageProcessor(
             screen_width=new_config.screen_width,
             screen_height=new_config.screen_height,
+            grayscale=new_config.grayscale,
             year_overlay_font_size=new_config.year_overlay_font_size,
             info_overlay_font_size=new_config.info_overlay_font_size,
+            year_overlay_x=new_config.year_overlay_x,
+            year_overlay_y=new_config.year_overlay_y,
+            info_overlay_x=new_config.info_overlay_x,
+            info_overlay_y=new_config.info_overlay_y,
         )
         if self._requires_display_rebuild(previous_config, new_config):
             self.display = self.display_builder(new_config)
