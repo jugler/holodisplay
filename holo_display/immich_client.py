@@ -29,6 +29,13 @@ class ImmichClient:
         else:
             print("Consultando biblioteca...")
 
+        # Persona OR: si hay mas de un ID, hacemos una consulta por cada uno y unimos resultados.
+        if self.config.search_mode == "person" and len(self.config.person_ids) > 1:
+            results = self._fetch_person_or_assets()
+            self._shuffle_assets(results)
+            print("Assets cargados:", len(results))
+            return results
+
         results: list[dict] = []
         next_page: str | int | None = 1
 
@@ -88,7 +95,7 @@ class ImmichClient:
             return f"{self.config.immich_url}/search/smart"
         return f"{self.config.immich_url}/search/metadata"
 
-    def _search_payload(self, page: str | int) -> dict:
+    def _search_payload(self, page: str | int, person_id: str | None = None) -> dict:
         if self.config.search_mode == "smart":
             payload = {
                 "query": self.config.smart_query,
@@ -99,8 +106,9 @@ class ImmichClient:
                 payload["city"] = self.config.smart_city
             return payload
 
+        person_ids = [person_id] if person_id is not None else list(self.config.person_ids)
         return {
-            "personIds": list(self.config.person_ids),
+            "personIds": person_ids,
             "size": self.config.search_size,
             "type": "IMAGE",
             "order": "asc",
@@ -231,3 +239,33 @@ class ImmichClient:
         import random
 
         random.shuffle(assets)
+
+    def _fetch_person_or_assets(self) -> list[dict]:
+        """Consulta /search/metadata por cada persona individualmente y une resultados (OR)."""
+        assets_by_id: dict[str, dict] = {}
+
+        for person_id in self.config.person_ids:
+            next_page: str | int | None = 1
+            while next_page is not None:
+                response = requests.post(
+                    self._search_url(),
+                    headers=self.config.headers,
+                    json=self._search_payload(next_page, person_id),
+                    timeout=15,
+                )
+
+                if response.status_code != 200:
+                    print(f"Error en search para {person_id}:", response.text)
+                    break
+
+                payload = response.json()
+                for asset in self._extract_assets(payload):
+                    if not isinstance(asset, dict):
+                        continue
+                    asset_id = asset.get("id")
+                    if isinstance(asset_id, str) and asset_id:
+                        assets_by_id.setdefault(asset_id, asset)
+
+                next_page = self._extract_next_page(payload)
+
+        return list(assets_by_id.values())

@@ -127,18 +127,62 @@ Jesus = "PERSON_ID_DE_IMMICH"
 - `show_person_overlay`: activa overlays para `person` y `random`
 - `overlay_layout`: distribucion de overlays
 - `transition_ms`: duracion de transicion en `pygame`
+- `orientation`: `landscape` (por defecto), `portrait` o `any` para filtrar fotos verticales o horizontales.
+- `rotation_degrees`: entero entre 0, 90, 180 y 270; si `orientation = "portrait"` el render rotado antes de enviarlo al display físico.
+- El overlay de ubicación divide ciudad y país en líneas separadas (acortando `United States of America` a `USA`) solo cuando el modo no es `landscape`; en `landscape` se mantiene como una sola línea tipo `Berlin, Germany`.
+- cuando `orientation = "portrait"`, el render se arma como si el área fuera 90º rotada y el resultado final se gira 270º antes de enviarlo al display para que los overlays sigan alineados con la pantalla físicamente rotada.
 
 `[search]`
 
-- `mode`: `person`, `smart`, `memories` o `random`
+- `mode`: `person`, `smart`, `memories`, `random` o `art`
 - `smart_query`: obligatorio si `mode = "smart"`
 - `default_people`: personas por defecto para `person`
 - `search_size`: cantidad de resultados por lote
 - `seen_buffer_size`: buffer para evitar repetidos en ciertos modos
 
-`[persons]`
+Personas
 
-- mapa de nombre visible a `personId` de Immich
+- Las personas ya no viven en `[persons]` del `config.toml`. Ahora se leen desde un archivo `people.toml` ubicado junto al config que uses (por ejemplo `config.toml` → `people.toml`, `config.holothot.toml` → `people.toml`).
+- Genera ese archivo con `python3 export_people.py` o mantenlo a mano. Contiene pares `"Nombre" = "personId"`.
+- `default_people` en `[search]` debe referenciar nombres existentes en ese `people.toml` o fallará al arrancar.
+- Puedes definir grupos en `[aliases]` dentro de `people.toml`, por ejemplo:
+
+```toml
+[aliases]
+Amigos = ["Clarisa", "Paola", "Sara"]
+Familia = ["Jesus", "Vero"]
+```
+
+Los aliases sirven tanto en `default_people` como en `--person`.
+
+`[art]`
+
+- `api_key`: API key del usuario art; se usa cuando `search.mode = "art"` o `--art`. En ese modo los overlays se apagan automáticamente.
+
+## Exportar personas
+
+Para evitar buscar manualmente los IDs de cada persona, se agregó `export_people.py` en la raíz del repo.
+Con un `config.toml` válido basta ejecutar:
+
+```bash
+python3 export_people.py
+```
+
+Eso consulta `GET /people`, incluyendo toda la paginación, y genera `people.toml` con líneas como:
+
+```toml
+"Jesus" = "4b2d2c50..."
+"Vero" = "a9f7b3..."
+```
+
+Opciones relevantes:
+
+1. `--config` / `-c` apunta a otro archivo de configuración antes de llamar a la API.
+2. `--output` / `-o` cambia la ruta del `people.toml`.
+3. `--include-hidden` incluye personas ocultas (`withHidden=true`).
+4. `--immich-url` / `--api-key` permiten usar credenciales distintas.
+
+Usa ese `people.toml` para copiar los pares `nombre = id` dentro de `[persons]` o para tus scripts.
 
 ## Como correrlo
 
@@ -158,7 +202,7 @@ python3 HoloDisplay.py --config /ruta/a/config.toml
 
 ### `person`
 
-Muestra fotos de una o varias personas configuradas en `[persons]`.
+Muestra fotos de una o varias personas configuradas en `[search].default_people` (los IDs vienen de `people.toml`).
 
 Por config:
 
@@ -173,6 +217,10 @@ Por CLI:
 ```bash
 python3 HoloDisplay.py --person Jesus --person Vero
 ```
+
+Puedes usar aliases definidos en `people.toml` (se aceptan en `default_people` y en `--person`). Si pasas varias personas o aliases, se combinan con OR: basta que cualquier persona aparezca en la foto.
+
+Si agregas varias personas, el cliente consulta Immich una vez por cada `personId` y une los resultados (OR). No requiere que aparezcan juntas en la misma foto.
 
 ### `smart`
 
@@ -230,6 +278,25 @@ Por CLI:
 ```bash
 python3 HoloDisplay.py --random
 ```
+
+### `art`
+
+Usa el nuevo usuario “art” con su propia API key en el mismo servidor. El modo se comporta como un `random` específico para ese usuario.
+
+Por config:
+
+```toml
+[search]
+mode = "art"
+```
+
+Por CLI:
+
+```bash
+python3 HoloDisplay.py --art
+```
+
+En modo `art` los overlays se desactivan automáticamente aunque estén habilitados en la configuración, de modo que las imágenes se muestran sin texto adicional.
 
 ## Overlays
 
@@ -316,6 +383,15 @@ El destino por defecto esta definido en [`deploy.sh`](/Users/jugler/code/HoloDis
 - `config.toml` contiene datos sensibles como la API key y ahora esta ignorado por git.
 - En `memories`, la ubicacion puede requerir una consulta extra por asset porque la respuesta de `/memories` puede venir resumida.
 - Los videos no estan soportados como parte del flujo visual actual.
+- Para centrar un marco puedes usar `./center_guide.py` (requiere `pygame`). Se dibujará un cruzado y bordes horizontales/verticales que coinciden con las dimensiones de `config.toml`.
+## Guía de alineación
+
+Si necesitas centrar la pantalla dentro de un marco físico, ejecuta `./center_guide.py`. El script abre una ventana con una cuadrícula de líneas y bordes que coinciden con `screen_width` / `screen_height` de `config.toml`. Ajusta color (`--color R,G,B`), fondo (`--background R,G,B`), grosor (`--thickness`), y separación de la cuadrícula (`--grid-spacing`). Pulsa `Esc` o `q` para salir.
+
+```bash
+pip install pygame
+python3 center_guide.py --config config.holodisplay.toml --color 255,0,0 --thickness 3
+```
 
 ## Ejemplos rapidos
 

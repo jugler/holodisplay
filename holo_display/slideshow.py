@@ -8,6 +8,11 @@ from threading import Lock
 from typing import Callable
 
 from .config import AppConfig
+
+COUNTRY_ALIASES = {
+    "United States of America": "USA",
+    "United Kingdom": "UK",
+}
 from .display import DisplayBackend
 from .image_processing import ImageProcessor
 from .immich_client import ImmichClient
@@ -118,12 +123,18 @@ class SlideshowApp:
             try:
                 image, (width, height) = self.processor.prepare(
                     image_bytes,
-                    allow_vertical=self.config.search_mode == "memories",
+                    allow_vertical=(
+                        self.config.search_mode == "memories"
+                        or self.config.orientation == "portrait"
+                    ),
                 )
             except ValueError as error:
                 if str(error) == "vertical_image":
                     continue
                 raise
+
+            if not self._matches_orientation(width, height):
+                continue
 
             if self.config.search_mode == "memories":
                 image = self.processor.add_person_overlay(
@@ -135,8 +146,10 @@ class SlideshowApp:
                     show_year=self.config.show_year_overlay,
                     show_info=self.config.show_info_overlay,
                 )
-            elif self.config.search_mode in {"person", "random"} and (
-                self.config.show_year_overlay or self.config.show_info_overlay
+            elif (
+                self.config.search_mode in {"person", "random"}
+                and not self.config.use_art_api_key
+                and (self.config.show_year_overlay or self.config.show_info_overlay)
             ):
                 image = self.processor.add_person_overlay(
                     image,
@@ -147,6 +160,10 @@ class SlideshowApp:
                     show_year=self.config.show_year_overlay,
                     show_info=self.config.show_info_overlay,
                 )
+
+            if self.config.orientation == "portrait" and self.config.rotation_degrees:
+                image = image.rotate(self.config.rotation_degrees, expand=True)
+                width, height = image.size
 
             return PreparedFrame(
                 asset=overlay_asset,
@@ -184,6 +201,14 @@ class SlideshowApp:
             return False
 
         return all(asset_id in self.seen for asset_id in asset_ids)
+
+    def _matches_orientation(self, width: int, height: int) -> bool:
+        orientation = self.config.orientation
+        if orientation == "portrait":
+            return height >= width
+        if orientation == "landscape":
+            return width >= height
+        return True
 
     def _print_asset_info(self, asset: dict, width: int, height: int) -> None:
         filename = asset.get("originalFileName", "unknown")
@@ -236,11 +261,17 @@ class SlideshowApp:
         location_parts: list[str] = []
         for value in (city, country):
             if isinstance(value, str) and value.strip():
-                location_parts.append(value.strip())
+                trimmed = value.strip()
+                location_parts.append(COUNTRY_ALIASES.get(trimmed, trimmed))
 
-        if not location_parts:
+        unique_parts = list(dict.fromkeys(location_parts))
+        if not unique_parts:
             return None
-        return ", ".join(dict.fromkeys(location_parts))
+        if self.config.orientation == "landscape":
+            return ", ".join(unique_parts[:2])
+        if len(unique_parts) >= 2:
+            return "\n".join(unique_parts[:2])
+        return unique_parts[0]
 
     def _asset_with_details(self, asset: dict) -> dict:
         if self.config.search_mode != "memories":
@@ -272,8 +303,8 @@ class SlideshowApp:
         self.config = new_config
         self.client = ImmichClient(new_config)
         self.processor = ImageProcessor(
-            screen_width=new_config.screen_width,
-            screen_height=new_config.screen_height,
+            screen_width=new_config.logical_width,
+            screen_height=new_config.logical_height,
             grayscale=new_config.grayscale,
             year_overlay_font_size=new_config.year_overlay_font_size,
             info_overlay_font_size=new_config.info_overlay_font_size,

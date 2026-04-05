@@ -4,6 +4,8 @@ __pycache__/
 config.toml
 config.frame.toml
 config.holodisplay.toml
+config.holothot.toml
+people.toml
 node_modules/
 .DS_Store
 venv/

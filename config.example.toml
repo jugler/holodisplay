@@ -28,6 +28,8 @@ overlay_layout = "split"
 # info_overlay_x = 20
 # info_overlay_y = 80
 transition_ms = 700
+# orientation = "portrait" # portrait/landscape/any
+# rotation_degrees = 270 # use 0, 90, 180, 270
 
 [search]
 # modes soportados: person, smart, memories, random
@@ -38,9 +40,5 @@ default_people = ["Jesus"]
 search_size = 1000
 seen_buffer_size = 100
 
-[persons]
-Jesus = "PERSON_ID_DE_IMMICH"
-Ismael = "PERSON_ID_DE_IMMICH"
-Vero = "PERSON_ID_DE_IMMICH"
-Joel = "PERSON_ID_DE_IMMICH"
-Gaby = "PERSON_ID_DE_IMMICH"
+[art]
+# api_key = "KEY_DEL_USUARIO_ART"

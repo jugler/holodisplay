@@ -5,6 +5,11 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
+def _split_info_lines(value: str) -> list[str]:
+    lines = [line.strip() for line in value.splitlines()]
+    return [line for line in lines if line]
+
+
 class ImageProcessor:
     def __init__(
         self,
@@ -115,7 +120,11 @@ class ImageProcessor:
                 side="left" if is_mirrored else "right",
             )
 
-        info_lines = [line for line in (people, location) if line] if show_info else []
+        info_lines: list[str] = []
+        if show_info:
+            for value in (people, location):
+                if value:
+                    info_lines.extend(_split_info_lines(value))
         if not info_lines:
             return result
 

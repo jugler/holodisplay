@@ -10,7 +10,11 @@ from .config import (
     DEFAULT_DISPLAY_TIME,
     DEFAULT_TRANSITION_MS,
     FileConfig,
+    ORIENTATION_CHOICES,
+    ROTATION_DEGREES_CHOICES,
+    DEFAULT_ROTATION_DEGREES,
     load_file_config,
+    _expand_people,
 )
 
 
@@ -22,11 +26,14 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
     namespace = parser.parse_args(args)
 
     search_mode = file_config.search_mode
-    active_people = tuple(file_config.default_people)
+    active_people = _expand_people(file_config.default_people, file_config.persons, file_config.aliases)
     active_person = active_people[0]
     person_ids = tuple(file_config.persons[name] for name in active_people)
     person_id = person_ids[0]
     smart_query = file_config.smart_query
+    orientation = namespace.orientation or file_config.orientation
+    rotation_degrees = namespace.rotation if namespace.rotation is not None else file_config.rotation_degrees
+    art_flag = namespace.art or file_config.default_art_mode
 
     if search_mode == "smart":
         search_mode = "smart"
@@ -49,7 +56,7 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
 
     if namespace.person is not None:
         search_mode = "person"
-        active_people = tuple(namespace.person)
+        active_people = _expand_people(tuple(namespace.person), file_config.persons, file_config.aliases)
         active_person = active_people[0]
         person_ids = tuple(file_config.persons[name] for name in active_people)
         person_id = person_ids[0]
@@ -76,9 +83,15 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         person_ids = ()
         smart_query = None
 
+    api_key_value = file_config.api_key
+    if art_flag:
+        if not file_config.art_api_key:
+            raise ValueError("art mode requiere definir art.api_key en el archivo de configuracion")
+        api_key_value = file_config.art_api_key
+
     return AppConfig(
         immich_url=file_config.immich_url,
-        api_key=file_config.api_key,
+        api_key=api_key_value,
         display_time=namespace.seconds,
         display_backend=namespace.backend,
         grayscale=file_config.grayscale,
@@ -94,6 +107,8 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         pics_dir=file_config.pics_dir,
         screen_width=file_config.screen_width,
         screen_height=file_config.screen_height,
+        orientation=orientation,
+        rotation_degrees=rotation_degrees,
         active_person=active_person,
         active_people=active_people,
         person_id=person_id,
@@ -104,6 +119,7 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         transition_ms=namespace.speed,
         search_size=file_config.search_size,
         seen_buffer_size=file_config.seen_buffer_size,
+        use_art_api_key=art_flag,
     )
 
 
@@ -130,8 +146,8 @@ def _build_parser(file_config: FileConfig) -> argparse.ArgumentParser:
         "--person",
         action="append",
         default=None,
-        choices=sorted(file_config.persons.keys()),
-        help="Persona a buscar en Immich. Se puede repetir varias veces.",
+        choices=sorted(set(file_config.persons.keys()) | set(file_config.aliases.keys())),
+        help="Persona o alias a buscar en Immich. Se puede repetir varias veces.",
     )
     search_group.add_argument(
         "--smart",
@@ -179,6 +195,22 @@ def _build_parser(file_config: FileConfig) -> argparse.ArgumentParser:
         "--speed",
         type=int,
         help="Velocidad de cambio en milisegundos para la transicion.",
+    )
+    parser.add_argument(
+        "--orientation",
+        choices=sorted(ORIENTATION_CHOICES),
+        help="Forzar el modo de orientacion (portrait o landscape).",
+    )
+    parser.add_argument(
+        "--rotation",
+        type=int,
+        choices=sorted(ROTATION_DEGREES_CHOICES),
+        help="Rotar el render final (0, 90, 180, 270); se aplica cuando orientation=portrait.",
+    )
+    parser.add_argument(
+        "--art",
+        action="store_true",
+        help="Usa la API key del usuario art (requiere `[art].api_key`).",
     )
 
     return parser

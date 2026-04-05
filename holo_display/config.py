@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
 import tomllib
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
@@ -12,6 +14,11 @@ DEFAULT_SEARCH_SIZE = 1000
 DEFAULT_SEEN_BUFFER_SIZE = 100
 DEFAULT_DISPLAY_BACKEND = "framebuffer"
 DEFAULT_TRANSITION_MS = 700
+DEFAULT_ROTATION_DEGREES = 0
+DEFAULT_PEOPLE_FILENAME = "people.toml"
+ROTATION_DEGREES_CHOICES = {0, 90, 180, 270}
+ORIENTATION_CHOICES = {"landscape", "portrait", "any"}
+Orientation = Literal["landscape", "portrait", "any"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,11 @@ class FileConfig:
     smart_city: str | None
     default_people: tuple[str, ...]
     persons: dict[str, str]
+    aliases: dict[str, tuple[str, ...]]
+    orientation: Orientation
+    rotation_degrees: int
+    art_api_key: str | None
+    default_art_mode: bool
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,8 @@ class AppConfig:
     pics_dir: Path
     screen_width: int
     screen_height: int
+    orientation: Orientation = "landscape"
+    rotation_degrees: int = DEFAULT_ROTATION_DEGREES
     active_person: str | None = None
     active_people: tuple[str, ...] = ()
     person_id: str | None = None
@@ -72,6 +86,19 @@ class AppConfig:
     transition_ms: int = DEFAULT_TRANSITION_MS
     search_size: int = DEFAULT_SEARCH_SIZE
     seen_buffer_size: int = DEFAULT_SEEN_BUFFER_SIZE
+    use_art_api_key: bool = False
+
+    @property
+    def logical_width(self) -> int:
+        if self.orientation == "portrait":
+            return self.screen_height
+        return self.screen_width
+
+    @property
+    def logical_height(self) -> int:
+        if self.orientation == "portrait":
+            return self.screen_width
+        return self.screen_height
 
     @property
     def headers(self) -> dict[str, str]:
@@ -98,8 +125,9 @@ class AppConfig:
         return self.active_person or "unknown"
 
 
-def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
+def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | Path | None = None) -> FileConfig:
     config_path = Path(path).expanduser()
+    resolved_people_path = _resolve_people_path(config_path, people_path)
     try:
         raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except FileNotFoundError as error:
@@ -110,7 +138,14 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
     immich = _get_table(raw, "immich")
     display = _get_table(raw, "display")
     search = _get_table(raw, "search")
-    persons = _get_table(raw, "persons")
+    persons, aliases = _load_people(resolved_people_path)
+    art = raw.get("art", {})
+    if art is None:
+        art_api_key = None
+    else:
+        if not isinstance(art, dict):
+            raise ValueError("La seccion [art] debe ser un objeto")
+        art_api_key = _optional_str(art, "api_key", "art.api_key")
 
     default_people_value = search.get("default_people", ("Jesus",))
     if not isinstance(default_people_value, list | tuple):
@@ -119,18 +154,21 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
     if not default_people:
         raise ValueError("search.default_people no puede estar vacio")
 
-    search_mode = _require_str(search, "mode", "search.mode", "person")
-    if search_mode not in {"person", "smart", "memories", "random"}:
-        raise ValueError("search.mode debe ser person, smart, memories o random")
+    raw_search_mode = _require_str(search, "mode", "search.mode", "person")
+    if raw_search_mode not in {"person", "smart", "memories", "random", "art"}:
+        raise ValueError("search.mode debe ser person, smart, memories, random o art")
+
+    default_art_mode = raw_search_mode == "art"
+    search_mode = "random" if default_art_mode else raw_search_mode
 
     smart_query = _optional_str(search, "smart_query", "search.smart_query")
     if search_mode == "smart" and not smart_query:
         raise ValueError("search.smart_query es obligatorio cuando search.mode es smart")
 
-    unknown_people = [name for name in default_people if name not in persons]
-    if unknown_people:
-        unknown_list = ", ".join(unknown_people)
-        raise ValueError(f"Personas por defecto no definidas en [persons]: {unknown_list}")
+    try:
+        _ = _expand_people(default_people, persons, aliases)
+    except ValueError as error:
+        raise ValueError(f"En default_people: {error}") from error
 
     return FileConfig(
         immich_url=_require_str(immich, "url", "immich.url"),
@@ -206,6 +244,19 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
             "display.transition_ms",
             DEFAULT_TRANSITION_MS,
         ),
+        orientation=_require_choice(
+            display,
+            "orientation",
+            "display.orientation",
+            ORIENTATION_CHOICES,
+            "landscape",
+        ),
+        rotation_degrees=_require_rotation_degrees(
+            display,
+            "rotation_degrees",
+            "display.rotation_degrees",
+            DEFAULT_ROTATION_DEGREES,
+        ),
         search_size=_require_int(search, "search_size", "search.search_size", DEFAULT_SEARCH_SIZE),
         seen_buffer_size=_require_int(
             search,
@@ -217,8 +268,85 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH) -> FileConfig:
         smart_query=smart_query,
         smart_city=_optional_str(search, "smart_city", "search.smart_city"),
         default_people=default_people,
-        persons={name: _ensure_str(value, f"persons.{name}") for name, value in persons.items()},
+        persons=persons,
+        aliases=aliases,
+        art_api_key=art_api_key,
+        default_art_mode=default_art_mode,
     )
+
+
+def _resolve_people_path(config_path: Path, people_path: str | Path | None) -> Path:
+    if people_path is not None:
+        return Path(people_path).expanduser()
+    return config_path.with_name(DEFAULT_PEOPLE_FILENAME)
+
+
+def _load_people(path: Path) -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise ValueError(
+            f"No se encontro el archivo de personas: {path}. Genera uno con export_people.py"
+        ) from error
+    except tomllib.TOMLDecodeError as error:
+        raise ValueError(f"El archivo de personas no es TOML valido: {path}: {error}") from error
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"El archivo de personas debe contener un mapa simple de nombre a id: {path}")
+
+    aliases_raw = raw.pop("aliases", None)
+
+    people: dict[str, str] = {}
+    for name, value in raw.items():
+        person_name = _ensure_str(name, "person name")
+        if person_name == "aliases":
+            raise ValueError("aliases es una clave reservada en people.toml")
+        person_id = _ensure_str(value, f"persons.{person_name}")
+        people[person_name] = person_id
+
+    if not people:
+        raise ValueError(f"El archivo de personas esta vacio: {path}")
+
+    aliases: dict[str, tuple[str, ...]] = {}
+    if aliases_raw is not None:
+        if not isinstance(aliases_raw, dict):
+            raise ValueError("aliases debe ser un objeto con listas de nombres")
+        for alias, names in aliases_raw.items():
+            alias_name = _ensure_str(alias, "alias name")
+            if alias_name in people:
+                raise ValueError(f"El alias {alias_name} choca con una persona existente")
+            if not isinstance(names, list | tuple):
+                raise ValueError(f"aliases.{alias_name} debe ser una lista de nombres")
+            aliases[alias_name] = tuple(_ensure_str(n, f"aliases.{alias_name}[]") for n in names)
+
+    return people, aliases
+
+
+def _expand_people(
+    names: tuple[str, ...],
+    persons: dict[str, str],
+    aliases: dict[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name in persons:
+            if name not in seen:
+                expanded.append(name)
+                seen.add(name)
+            continue
+        alias_members = aliases.get(name)
+        if alias_members is None:
+            raise ValueError(f"Persona o alias desconocido: {name}")
+        for member in alias_members:
+            if member not in persons:
+                raise ValueError(f"El alias {name} referencia una persona inexistente: {member}")
+            if member not in seen:
+                expanded.append(member)
+                seen.add(member)
+    if not expanded:
+        raise ValueError("La lista de personas expandida quedo vacia")
+    return tuple(expanded)
 
 
 def _get_table(data: dict[str, object], key: str) -> dict[str, object]:
@@ -313,3 +441,17 @@ def _ensure_str(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} debe ser un texto no vacio")
     return value.strip()
+
+
+def _require_rotation_degrees(
+    data: dict[str, object],
+    key: str,
+    label: str,
+    default: int,
+) -> int:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{label} debe ser un multiplo de 90 entre 0 y 270")
+    if value not in ROTATION_DEGREES_CHOICES:
+        raise ValueError(f"{label} debe ser 0, 90, 180 o 270")
+    return value
