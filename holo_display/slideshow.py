@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from datetime import date, datetime
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
@@ -242,8 +243,10 @@ class SlideshowApp:
             if not isinstance(person, dict):
                 continue
             name = person.get("name")
-            if isinstance(name, str) and name.strip():
-                names.append(name.strip().split()[0])
+            birthdate = person.get("birthDate")
+            label = self._format_person_label(name, birthdate, asset.get("fileCreatedAt"))
+            if label:
+                names.append(label)
 
         if not names:
             return None
@@ -272,6 +275,47 @@ class SlideshowApp:
         if len(unique_parts) >= 2:
             return "\n".join(unique_parts[:2])
         return unique_parts[0]
+
+    def _format_person_label(self, name: object, birthdate: object, file_created_at: object) -> str | None:
+        if not isinstance(name, str) or not name.strip():
+            return None
+        clean_name = name.strip().split()[0]
+        age_info = self._compute_age(file_created_at, birthdate)
+        if age_info is None:
+            return clean_name
+        if "months" in age_info:
+            return f"{clean_name} ({age_info['months']} meses)"
+        return f"{clean_name} ({age_info['years']})"
+
+    def _compute_age(self, photo_date_raw: object, birthdate_raw: object) -> dict[str, int] | None:
+        if not isinstance(photo_date_raw, str) or not isinstance(birthdate_raw, str):
+            return None
+        try:
+            photo_date = datetime.fromisoformat(photo_date_raw.replace("Z", "+00:00")).date()
+        except ValueError:
+            try:
+                photo_date = date.fromisoformat(photo_date_raw[:10])
+            except Exception:
+                return None
+        try:
+            birth_date = date.fromisoformat(birthdate_raw[:10])
+        except Exception:
+            return None
+        years = photo_date.year - birth_date.year
+        if (photo_date.month, photo_date.day) < (birth_date.month, birth_date.day):
+            years -= 1
+        if years < 0 or years > 150:
+            return None
+        if years > 0:
+            return {"years": years}
+
+        # Months old (only when under 1 year)
+        months = (photo_date.year - birth_date.year) * 12 + (photo_date.month - birth_date.month)
+        if photo_date.day < birth_date.day:
+            months -= 1
+        if months < 0 or months > 24:
+            return None
+        return {"months": months}
 
     def _asset_with_details(self, asset: dict) -> dict:
         if self.config.search_mode != "memories":

@@ -220,6 +220,8 @@ python3 HoloDisplay.py --person Jesus --person Vero
 
 Puedes usar aliases definidos en `people.toml` (se aceptan en `default_people` y en `--person`). Si pasas varias personas o aliases, se combinan con OR: basta que cualquier persona aparezca en la foto.
 
+Si Immich devuelve `birthDate` en cada persona del asset, el overlay muestra la edad calculada al momento de la foto: `Vero (34)` y, si es menor a 1 año, en meses: `Bebé (11 meses)`.
+
 Si agregas varias personas, el cliente consulta Immich una vez por cada `personId` y une los resultados (OR). No requiere que aparezcan juntas en la misma foto.
 
 ### `smart`
