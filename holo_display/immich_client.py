@@ -201,27 +201,51 @@ class ImmichClient:
             print(f"{len(memories)} memorias")
 
     def _fetch_random_assets(self) -> list[dict]:
-        response = requests.post(
-            f"{self.config.immich_url}/search/random",
-            headers=self.config.headers,
-            json={
-                "size": self.config.search_size,
-                "type": "IMAGE",
-                "withExif": True,
-                "withPeople": True,
-            },
-            timeout=30,
-        )
+        filtered: list[dict] = []
+        attempts = 0
+        max_attempts = 6
+        target = self.config.search_size
 
-        if response.status_code != 200:
-            print("Error en random:", response.text)
-            return []
+        while len(filtered) < target and attempts < max_attempts:
+            attempts += 1
+            response = requests.post(
+                f"{self.config.immich_url}/search/random",
+                headers=self.config.headers,
+                json={
+                    "size": target,
+                    "type": "IMAGE",
+                    "withExif": True,
+                    "withPeople": True,
+                },
+                timeout=30,
+            )
 
-        payload = response.json()
-        if not isinstance(payload, list):
-            return []
+            if response.status_code != 200:
+                print("Error en random:", response.text)
+                break
 
-        return [asset for asset in payload if isinstance(asset, dict)]
+            payload = response.json()
+            if not isinstance(payload, list):
+                break
+
+            assets = [asset for asset in payload if isinstance(asset, dict)]
+            print(f"Random intento {attempts}: descargados {len(assets)} assets")
+            kept, skipped = self._filter_by_orientation(assets)
+            filtered.extend(kept)
+            print(
+                f"Random intento {attempts}: {len(kept)} orientacion ok, "
+                f"{skipped} descartadas. Total acumulado {len(filtered)}/{target}"
+            )
+
+            if not assets:
+                break
+
+        if not filtered:
+            print("Random: sin assets con orientacion aceptable")
+        elif len(filtered) < target:
+            print(f"Random: {len(filtered)} assets con orientacion correcta, faltan {target - len(filtered)}")
+
+        return filtered
 
     def _today_memory_date(self) -> str:
         return date.today().isoformat()
@@ -239,6 +263,46 @@ class ImmichClient:
         import random
 
         random.shuffle(assets)
+
+    def _filter_by_orientation(self, assets: list[dict]) -> tuple[list[dict], int]:
+        kept: list[dict] = []
+        skipped = 0
+        for asset in assets:
+            dims = self._asset_dimensions(asset)
+            if dims is None:
+                # Si no hay dimensiones, dejamos pasar solo si orientation = any
+                if self.config.orientation == "any":
+                    kept.append(asset)
+                else:
+                    skipped += 1
+                continue
+            width, height = dims
+            if self._matches_orientation(width, height):
+                kept.append(asset)
+            else:
+                skipped += 1
+        return kept, skipped
+
+    def _matches_orientation(self, width: int, height: int) -> bool:
+        orientation = self.config.orientation
+        if orientation == "portrait":
+            return height >= width
+        if orientation == "landscape":
+            return width >= height
+        return True
+
+    def _asset_dimensions(self, asset: dict) -> tuple[int, int] | None:
+        exif_info = asset.get("exifInfo")
+        if isinstance(exif_info, dict):
+            width = exif_info.get("exifImageWidth") or exif_info.get("imageWidth")
+            height = exif_info.get("exifImageHeight") or exif_info.get("imageHeight")
+            if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+                return width, height
+        width = asset.get("width")
+        height = asset.get("height")
+        if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+            return width, height
+        return None
 
     def _fetch_person_or_assets(self) -> list[dict]:
         """Consulta /search/metadata por cada persona individualmente y une resultados (OR)."""

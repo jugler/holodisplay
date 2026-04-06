@@ -119,6 +119,15 @@ class SlideshowApp:
                 continue
 
             overlay_asset = self._asset_with_details(asset)
+
+            pre_dims = self._asset_dimensions(overlay_asset)
+            if pre_dims is not None and not self._matches_orientation(*pre_dims):
+                print(
+                    f"Descartada por orientacion (pre): {pre_dims[0]}x{pre_dims[1]} "
+                    f"(orientation={self.config.orientation})"
+                )
+                continue
+
             image_bytes = self.client.fetch_thumbnail(asset_id)
 
             try:
@@ -135,7 +144,16 @@ class SlideshowApp:
                 raise
 
             if not self._matches_orientation(width, height):
+                print(
+                    f"Descartada por orientacion: {width}x{height} "
+                    f"(orientation={self.config.orientation})"
+                )
                 continue
+            else:
+                print(
+                    f"Seleccionada: {width}x{height} "
+                    f"(orientation={self.config.orientation})"
+                )
 
             if self.config.search_mode == "memories":
                 image = self.processor.add_person_overlay(
@@ -275,6 +293,19 @@ class SlideshowApp:
         if len(unique_parts) >= 2:
             return "\n".join(unique_parts[:2])
         return unique_parts[0]
+
+    def _asset_dimensions(self, asset: dict) -> tuple[int, int] | None:
+        exif_info = asset.get("exifInfo")
+        if isinstance(exif_info, dict):
+            width = exif_info.get("exifImageWidth") or exif_info.get("imageWidth")
+            height = exif_info.get("exifImageHeight") or exif_info.get("imageHeight")
+            if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+                return width, height
+        width = asset.get("width")
+        height = asset.get("height")
+        if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+            return width, height
+        return None
 
     def _format_person_label(self, name: object, birthdate: object, file_created_at: object) -> str | None:
         if not isinstance(name, str) or not name.strip():
