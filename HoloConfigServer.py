@@ -166,6 +166,12 @@ PAGE_TEMPLATE = """
         {% endif %}
         <section class="card">
             <form method="post">
+                <input type="hidden" name="action" value="next">
+                <button type="submit">Siguiente foto</button>
+            </form>
+        </section>
+        <section class="card">
+            <form method="post">
                 <input type="hidden" name="action" value="config">
                 <h2>Display</h2>
                 <div class="toggle-row">
@@ -233,14 +239,20 @@ PAGE_TEMPLATE = """
         </section>
         <section class="card">
             <form method="post">
-                <input type="hidden" name="action" value="next">
-                <button type="submit">Siguiente foto ahora</button>
+                <input type="hidden" name="action" value="restart_holoconfig">
+                <button class="danger" type="submit">Reset HoloConfig</button>
             </form>
         </section>
         <section class="card">
             <form method="post">
                 <input type="hidden" name="action" value="restart">
                 <button class="danger" type="submit">Reset HoloDisplay</button>
+            </form>
+        </section>
+        <section class="card">
+            <form method="post" id="shutdown-form">
+                <input type="hidden" name="action" value="shutdown">
+                <button class="danger" type="submit">Apagar pi</button>
             </form>
         </section>
     </main>
@@ -274,6 +286,12 @@ PAGE_TEMPLATE = """
         });
 
         document.addEventListener('DOMContentLoaded', updateSections);
+        const shutdownForm = document.getElementById('shutdown-form');
+        shutdownForm?.addEventListener('submit', (event) => {
+            if (!confirm('¿Seguro que quieres apagar la Pi?')) {
+                event.preventDefault();
+            }
+        });
     </script>
 </body>
 </html>
@@ -544,6 +562,18 @@ def index() -> str:
                 _, _, immediate_section, _, _ = _read_config_sections()
             except ValueError as exc:
                 error = str(exc)
+        elif action == "restart_holoconfig":
+            try:
+                subprocess.run(
+                    ["sudo", "systemctl", "restart", "holoconfig.service"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                message = "holoconfig.service reiniciado"
+            except subprocess.CalledProcessError as exc:
+                stderr = exc.stderr.strip() if exc.stderr else ""
+                error = f"Error reiniciando HoloConfig: {stderr or exc}"
         elif action == "restart":
             try:
                 subprocess.run(
@@ -556,6 +586,18 @@ def index() -> str:
             except subprocess.CalledProcessError as exc:
                 stderr = exc.stderr.strip() if exc.stderr else ""
                 error = f"Error reiniciando servicio: {stderr or exc}"
+        elif action == "shutdown":
+            try:
+                subprocess.run(
+                    ["sudo", "shutdown", "now"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                message = "La Pi se está apagando"
+            except subprocess.CalledProcessError as exc:
+                stderr = exc.stderr.strip() if exc.stderr else ""
+                error = f"Error apagando la Pi: {stderr or exc}"
         else:
             error = "Acción desconocida"
     selected_alias = None
