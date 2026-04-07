@@ -143,17 +143,9 @@ class SlideshowApp:
                     continue
                 raise
 
+            filename = overlay_asset.get("originalFileName", "unknown")
             if not self._matches_orientation(width, height):
-                print(
-                    f"Descartada por orientacion: {width}x{height} "
-                    f"(orientation={self.config.orientation})"
-                )
                 continue
-            else:
-                print(
-                    f"Seleccionada: {width}x{height} "
-                    f"(orientation={self.config.orientation})"
-                )
 
             if self.config.search_mode == "memories":
                 image = self.processor.add_person_overlay(

@@ -37,6 +37,7 @@ class ImmichClient:
             return results
 
         results: list[dict] = []
+        seen_ids: set[str] = set()
         next_page: str | int | None = 1
 
         while next_page is not None:
@@ -52,7 +53,23 @@ class ImmichClient:
                 return []
 
             payload = response.json()
-            results.extend(self._extract_assets(payload))
+            assets = self._extract_assets(payload)
+            kept, skipped = self._filter_by_orientation(assets)
+            added = 0
+            for asset in kept:
+                asset_id = asset.get("id")
+                if not isinstance(asset_id, str):
+                    continue
+                if asset_id in seen_ids:
+                    continue
+                seen_ids.add(asset_id)
+                results.append(asset)
+                added += 1
+            if assets:
+                print(
+                    f"Search page {next_page}: {added} orientacion ok, "
+                    f"{skipped} descartadas. Total {len(results)}"
+                )
             next_page = self._extract_next_page(payload)
 
         if self.config.search_mode != "memories":
@@ -202,6 +219,7 @@ class ImmichClient:
 
     def _fetch_random_assets(self) -> list[dict]:
         filtered: list[dict] = []
+        seen_ids: set[str] = set()
         attempts = 0
         max_attempts = 6
         target = self.config.search_size
@@ -231,9 +249,18 @@ class ImmichClient:
             assets = [asset for asset in payload if isinstance(asset, dict)]
             print(f"Random intento {attempts}: descargados {len(assets)} assets")
             kept, skipped = self._filter_by_orientation(assets)
-            filtered.extend(kept)
+            added = 0
+            for asset in kept:
+                asset_id = asset.get("id")
+                if not isinstance(asset_id, str):
+                    continue
+                if asset_id in seen_ids:
+                    continue
+                seen_ids.add(asset_id)
+                filtered.append(asset)
+                added += 1
             print(
-                f"Random intento {attempts}: {len(kept)} orientacion ok, "
+                f"Random intento {attempts}: {added} orientacion ok, "
                 f"{skipped} descartadas. Total acumulado {len(filtered)}/{target}"
             )
 
