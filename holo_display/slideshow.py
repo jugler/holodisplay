@@ -187,6 +187,8 @@ class SlideshowApp:
                     show_info=self.config.show_info_overlay,
                 )
 
+            image = self.processor.apply_brightness(image)
+
             if self.config.orientation == "portrait" and self.config.rotation_degrees:
                 image = image.rotate(self.config.rotation_degrees, expand=True)
                 width, height = image.size

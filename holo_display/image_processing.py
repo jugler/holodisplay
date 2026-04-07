@@ -49,7 +49,6 @@ class ImageProcessor:
         image = self._compose_background(image, width, height)
         if self.grayscale:
             image = image.convert("L").convert("RGB")
-        image = self._apply_brightness(image)
         return image, (width, height)
 
     def add_memory_overlay(
@@ -204,7 +203,7 @@ class ImageProcessor:
         background.paste(resized, (x, y))
         return background
 
-    def _apply_brightness(self, image: Image.Image) -> Image.Image:
+    def apply_brightness(self, image: Image.Image) -> Image.Image:
         if self.brightness == 1.0:
             return image
         return ImageEnhance.Brightness(image).enhance(self.brightness)
