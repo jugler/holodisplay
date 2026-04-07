@@ -378,8 +378,21 @@ Actualmente copia:
 - `HoloDisplay.py`
 - `config.toml`
 - carpeta `holo_display`
+- `HoloConfigServer.py`
 
 El destino por defecto esta definido en [`deploy.sh`](/Users/jugler/code/HoloDisplay/deploy.sh).
+
+## Interfaz web de configuración
+
+`HoloConfigServer.py` expone una página responsiva en `http://<tu-pi>:8080` que permite ajustar `config.toml`, cambiar el modo, seleccionar aliases/personas de `people.toml` y forzar la siguiente foto con `[immediate_actions].next`. Es ideal para acceder desde un celular antes de convertirlo en un shortcut/app.
+
+Para ejecutarlo basta con:
+
+```bash
+python HoloConfigServer.py
+```
+
+La interfaz refresca los valores del archivo y escribe cambios inmediatamente para que el proceso principal los lea sin reiniciar.
 
 ## Notas
 

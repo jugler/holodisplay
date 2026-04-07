@@ -27,14 +27,15 @@ for REMOTE_HOST CONFIG_PATH in ${(kv)HOST_CONFIGS}; do
   echo "Deploy a $REMOTE_HOST usando $(basename "$CONFIG_PATH")"
 
   ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"
-  rsync -av \
-    --exclude '__pycache__' \
-    --exclude '*.pyc' \
-    "$PROJECT_DIR/HoloDisplay.py" \
-    "$PROJECT_DIR/holo_display" \
-    "$PROJECT_DIR/center_guide.py" \
-    "$PROJECT_DIR/export_people.py" \
-    "$REMOTE_HOST:$REMOTE_DIR/"
+rsync -av \
+  --exclude '__pycache__' \
+  --exclude '*.pyc' \
+  "$PROJECT_DIR/HoloDisplay.py" \
+  "$PROJECT_DIR/holo_display" \
+  "$PROJECT_DIR/center_guide.py" \
+  "$PROJECT_DIR/export_people.py" \
+  "$PROJECT_DIR/HoloConfigServer.py" \
+  "$REMOTE_HOST:$REMOTE_DIR/"
   rsync -av \
     "$CONFIG_PATH" \
     "$PEOPLE_PATH" \
