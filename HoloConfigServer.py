@@ -156,7 +156,7 @@ PAGE_TEMPLATE = """
 <body>
     <main>
         <header>
-            <h1>HoloDisplay Control</h1>
+            <h1>{{ instance_name or "HoloDisplay" }} Control</h1>
         </header>
         {% if error %}
         <div class="alert error">{{ error }}</div>
@@ -295,7 +295,7 @@ def _load_toml(path: Path) -> dict[str, object]:
         raise ValueError(f"{path.name} no es TOML válido: {error}") from error
 
 
-def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[str, object], float]:
+def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[str, object], float, str]:
     raw = _load_toml(CONFIG_PATH)
     display = raw.get("display")
     if not isinstance(display, dict):
@@ -306,8 +306,14 @@ def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[
     immediate = raw.get("immediate_actions")
     if not isinstance(immediate, dict):
         immediate = {}
+    instance_section = raw.get("name_of_holo_instance")
+    instance_label = ""
+    if isinstance(instance_section, dict):
+        name_value = instance_section.get("name")
+        if isinstance(name_value, str) and name_value.strip():
+            instance_label = name_value.strip()
     mtime = CONFIG_PATH.stat().st_mtime
-    return display, search, immediate, mtime
+    return display, search, immediate, mtime, instance_label
 
 
 def _load_people() -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
@@ -463,12 +469,13 @@ def index() -> str:
     error = None
     people_error = None
     try:
-        display_section, search_section, immediate_section, mtime = _read_config_sections()
+        display_section, search_section, immediate_section, mtime, instance_name = _read_config_sections()
     except ValueError as exc:
         display_section = {}
         search_section = {}
         immediate_section = {}
         mtime = 0
+        instance_name = ""
         error = str(exc)
     try:
         people_map, alias_map = _load_people()
@@ -523,7 +530,7 @@ def index() -> str:
                 updates.append(("search", "default_people", _format_toml_value(resolved)))
                 _apply_updates(updates)
                 message = "Configuración guardada"
-                display_section, search_section, immediate_section, mtime = _read_config_sections()
+                display_section, search_section, immediate_section, mtime, instance_name = _read_config_sections()
                 default_people_list = search_section.get("default_people")
                 if not isinstance(default_people_list, list):
                     default_people_list = []
@@ -534,7 +541,7 @@ def index() -> str:
             try:
                 _apply_updates([("immediate_actions", "next", "1")])
                 message = "Siguiente foto solicitada"
-                _, _, immediate_section, _ = _read_config_sections()
+                _, _, immediate_section, _, _ = _read_config_sections()
             except ValueError as exc:
                 error = str(exc)
         elif action == "restart":
@@ -574,6 +581,7 @@ def index() -> str:
         "message": message,
         "error": error,
         "sample_people": ", ".join(default_people_list[:3]) if default_people_list else "Jesus, Vero",
+        "instance_name": instance_name,
     }
     return render_template_string(PAGE_TEMPLATE, **context)
 

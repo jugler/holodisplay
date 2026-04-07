@@ -2,6 +2,9 @@
 url = "http://immich.local:2283/api"
 api_key = "REEMPLAZA_CON_TU_API_KEY"
 
+[name_of_holo_instance]
+name = "HoloDisplay"
+
 [display]
 pics_dir = "/home/pi/HoloDisplay/pics"
 screen_width = 1920
