@@ -35,6 +35,7 @@ rsync -av \
   "$PROJECT_DIR/center_guide.py" \
   "$PROJECT_DIR/export_people.py" \
   "$PROJECT_DIR/HoloConfigServer.py" \
+  "$PROJECT_DIR/assets" \
   "$REMOTE_HOST:$REMOTE_DIR/"
   rsync -av \
     "$CONFIG_PATH" \

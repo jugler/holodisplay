@@ -7,13 +7,22 @@ from typing import Iterable, Mapping, Tuple
 
 import subprocess
 import tomllib
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, send_from_directory, abort
 
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.toml"
 PEOPLE_PATH = BASE_DIR / "people.toml"
+ASSETS_DIR = BASE_DIR / "assets"
+
+
+@app.route("/assets/<path:filename>")
+def serve_asset(filename: str):
+    target = ASSETS_DIR / filename
+    if not target.exists() or not target.is_file():
+        abort(404)
+    return send_from_directory(ASSETS_DIR, filename)
 
 MODE_OPTIONS: list[tuple[str, str]] = [
     ("person", "Personas"),
@@ -30,6 +39,7 @@ PAGE_TEMPLATE = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icon-180.png">
     <title>Control HoloDisplay</title>
     <style>
         :root {

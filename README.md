@@ -379,6 +379,7 @@ Actualmente copia:
 - `config.toml`
 - carpeta `holo_display`
 - `HoloConfigServer.py`
+- carpeta `assets`
 
 El destino por defecto esta definido en [`deploy.sh`](/Users/jugler/code/HoloDisplay/deploy.sh).
 

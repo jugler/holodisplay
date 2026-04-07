@@ -1,0 +1,13 @@
+[Unit]
+Description=HoloConfig Server
+After=network.target
+
+[Service]
+WorkingDirectory=/home/pi/HoloDisplay
+ExecStart=/usr/bin/python3 HoloConfigServer.py
+Restart=always
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target
