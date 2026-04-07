@@ -44,3 +44,6 @@ seen_buffer_size = 100
 
 [art]
 # api_key = "KEY_DEL_USUARIO_ART"
+
+[immediate_actions]
+next = 0

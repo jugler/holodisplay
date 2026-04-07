@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from collections import deque
 from datetime import date, datetime
@@ -239,12 +240,15 @@ class SlideshowApp:
         filename = asset.get("originalFileName", "unknown")
         date = asset.get("fileCreatedAt", "unknown")
         location = self._asset_location_label(asset) or "sin ubicacion"
+        overlay_label = self._overlay_label()
 
         print("")
         print("Nueva imagen")
         print("Archivo:", filename)
         print("Fecha:", date)
         print("Ubicacion:", location)
+        print("Overlays:", overlay_label)
+        print("Grayscale:", "si" if self.config.grayscale else "no")
         print("Resolucion:", width, "x", height)
         print("")
 
@@ -474,5 +478,40 @@ class SlideshowApp:
                 continue
 
             if new_config != self.config:
+                if new_config.immediate_next:
+                    self._reset_immediate_next()
                 stop_event.set()
                 break
+
+    def _overlay_label(self) -> str:
+        parts: list[str] = []
+        if self.config.show_year_overlay:
+            parts.append("año")
+        if self.config.show_info_overlay:
+            parts.append("info")
+        overlays = ", ".join(parts) if parts else "ninguno"
+        return f"{overlays} (layout={self.config.overlay_layout})"
+
+    def _reset_immediate_next(self) -> None:
+        """Reset [immediate_actions].next to 0 in the current config file."""
+        path = self.config.config_path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as error:
+            print(f"No se pudo leer config para resetear immediate_actions: {error}")
+            return
+
+        # Replace existing setting if present; otherwise append section.
+        pattern = r"(\[immediate_actions\][^\[]*?next\s*=\s*)1"
+        replaced, count = re.subn(pattern, r"\g<1>0", text, flags=re.IGNORECASE | re.DOTALL)
+
+        if count == 0:
+            # Append section
+            if not text.endswith("\n"):
+                text += "\n"
+            replaced += "\n[immediate_actions]\nnext = 0\n"
+
+        try:
+            path.write_text(replaced, encoding="utf-8")
+        except Exception as error:
+            print(f"No se pudo escribir config para resetear immediate_actions: {error}")

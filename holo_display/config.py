@@ -55,6 +55,7 @@ class FileConfig:
     rotation_degrees: int
     art_api_key: str | None
     default_art_mode: bool
+    immediate_next: bool
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,8 @@ class AppConfig:
     search_size: int = DEFAULT_SEARCH_SIZE
     seen_buffer_size: int = DEFAULT_SEEN_BUFFER_SIZE
     use_art_api_key: bool = False
+    immediate_next: bool = False
+    config_path: Path = DEFAULT_CONFIG_PATH
 
     @property
     def logical_width(self) -> int:
@@ -148,7 +151,7 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
     else:
         if not isinstance(art, dict):
             raise ValueError("La seccion [art] debe ser un objeto")
-        art_api_key = _optional_str(art, "api_key", "art.api_key")
+    art_api_key = _optional_str(art, "api_key", "art.api_key")
 
     default_people_value = search.get("default_people", ("Jesus",))
     if not isinstance(default_people_value, list | tuple):
@@ -172,6 +175,16 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
         _ = _expand_people(default_people, persons, aliases)
     except ValueError as error:
         raise ValueError(f"En default_people: {error}") from error
+
+    immediate_actions = raw.get("immediate_actions", {})
+    immediate_next = False
+    if immediate_actions is not None:
+        if not isinstance(immediate_actions, dict):
+            raise ValueError("La seccion [immediate_actions] debe ser un objeto")
+        immediate_next_value = immediate_actions.get("next", 0)
+        if isinstance(immediate_next_value, bool) or not isinstance(immediate_next_value, int):
+            raise ValueError("immediate_actions.next debe ser 0 o 1")
+        immediate_next = bool(immediate_next_value)
 
     return FileConfig(
         immich_url=_require_str(immich, "url", "immich.url"),
@@ -281,6 +294,7 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
         aliases=aliases,
         art_api_key=art_api_key,
         default_art_mode=default_art_mode,
+        immediate_next=immediate_next,
     )
 
 
