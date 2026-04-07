@@ -5,6 +5,7 @@ config.toml
 config.frame.toml
 config.holodisplay.toml
 config.holothot.toml
+config.holoframe.toml
 people.toml
 node_modules/
 .DS_Store

@@ -15,6 +15,7 @@ DEFAULT_SEEN_BUFFER_SIZE = 100
 DEFAULT_DISPLAY_BACKEND = "framebuffer"
 DEFAULT_TRANSITION_MS = 700
 DEFAULT_ROTATION_DEGREES = 0
+DEFAULT_BRIGHTNESS = 1.0
 DEFAULT_PEOPLE_FILENAME = "people.toml"
 ROTATION_DEGREES_CHOICES = {0, 90, 180, 270}
 ORIENTATION_CHOICES = {"landscape", "portrait", "any"}
@@ -31,6 +32,7 @@ class FileConfig:
     display_time: int
     display_backend: str
     grayscale: bool
+    brightness: float
     show_year_overlay: bool
     show_info_overlay: bool
     overlay_layout: str
@@ -62,6 +64,7 @@ class AppConfig:
     display_time: int
     display_backend: str
     grayscale: bool
+    brightness: float
     show_year_overlay: bool
     show_info_overlay: bool
     overlay_layout: str
@@ -188,6 +191,12 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
             "grayscale",
             "display.grayscale",
             False,
+        ),
+        brightness=_require_positive_number(
+            display,
+            "brightness",
+            "display.brightness",
+            DEFAULT_BRIGHTNESS,
         ),
         show_year_overlay=_require_bool(
             display,
@@ -409,6 +418,18 @@ def _require_choice(
         options = ", ".join(sorted(choices))
         raise ValueError(f"{label} debe ser uno de: {options}")
     return value
+
+
+def _require_positive_number(
+    data: dict[str, object],
+    key: str,
+    label: str,
+    default: float,
+) -> float:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        raise ValueError(f"{label} debe ser un numero mayor que 0")
+    return float(value)
 
 
 def _optional_positive_int(

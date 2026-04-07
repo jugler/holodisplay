@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
             screen_width=config.logical_width,
             screen_height=config.logical_height,
             grayscale=config.grayscale,
+            brightness=config.brightness,
             year_overlay_font_size=config.year_overlay_font_size,
             info_overlay_font_size=config.info_overlay_font_size,
             year_overlay_x=config.year_overlay_x,

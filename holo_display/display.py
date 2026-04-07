@@ -4,16 +4,17 @@ import os
 import subprocess
 import time
 from pathlib import Path
+from threading import Event
 from typing import Protocol
 
 
 class DisplayBackend(Protocol):
-    def show_image(self, path: Path, display_time: int) -> None:
+    def show_image(self, path: Path, display_time: int, stop_event: Event | None = None) -> None:
         ...
 
 
 class FramebufferDisplay:
-    def show_image(self, path: Path, display_time: int) -> None:
+    def show_image(self, path: Path, display_time: int, stop_event: Event | None = None) -> None:
         subprocess.run(["killall", "fbi"], stderr=subprocess.DEVNULL, check=False)
         process = subprocess.Popen(
             [
@@ -31,8 +32,19 @@ class FramebufferDisplay:
             text=True,
         )
         time.sleep(0.2)
-        
-        time.sleep(display_time)
+
+        end_time = time.time() + display_time
+        while time.time() < end_time:
+            if stop_event is not None and stop_event.is_set():
+                break
+            time.sleep(0.1)
+
+        # Try to stop the running viewer early when requested.
+        try:
+            process.terminate()
+            process.wait(timeout=1)
+        except Exception:
+            process.kill()
 
 
 class PygameDisplay:
@@ -51,20 +63,20 @@ class PygameDisplay:
         self._current_surface = None
         self._selected_driver = None
 
-    def show_image(self, path: Path, display_time: int) -> None:
+    def show_image(self, path: Path, display_time: int, stop_event: Event | None = None) -> None:
         pygame = self._init_pygame()
         target_width, target_height = self._screen.get_size()
         next_surface = pygame.image.load(str(path)).convert()
         next_surface = pygame.transform.scale(next_surface, (target_width, target_height))
 
         transition_seconds = min(display_time, self.transition_ms / 1000)
-        transition_elapsed = self._run_transition(next_surface, transition_seconds)
+        transition_elapsed = self._run_transition(next_surface, transition_seconds, stop_event)
         hold_seconds = max(0, display_time - transition_elapsed)
 
         self._screen.blit(next_surface, (0, 0))
         pygame.display.flip()
         self._current_surface = next_surface
-        self._wait(hold_seconds)
+        self._wait(hold_seconds, stop_event)
 
     def _init_pygame(self):
         if self._pygame is not None:
@@ -150,7 +162,7 @@ class PygameDisplay:
         pygame.display.flip()
         time.sleep(1)
 
-    def _run_transition(self, next_surface, duration_seconds: float) -> float:
+    def _run_transition(self, next_surface, duration_seconds: float, stop_event: Event | None = None) -> float:
         pygame = self._pygame
         if self._current_surface is None or duration_seconds <= 0:
             self._screen.blit(next_surface, (0, 0))
@@ -161,6 +173,8 @@ class PygameDisplay:
         next_surface.set_alpha(0)
         while True:
             self._pump_events()
+            if stop_event is not None and stop_event.is_set():
+                break
             elapsed = time.monotonic() - start
             if elapsed >= duration_seconds:
                 break
@@ -175,9 +189,11 @@ class PygameDisplay:
         next_surface.set_alpha(None)
         return time.monotonic() - start
 
-    def _wait(self, seconds: float) -> None:
+    def _wait(self, seconds: float, stop_event: Event | None = None) -> None:
         end_time = time.monotonic() + seconds
         while time.monotonic() < end_time:
+            if stop_event is not None and stop_event.is_set():
+                break
             self._pump_events()
             self._clock.tick(30)
 

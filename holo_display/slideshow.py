@@ -5,7 +5,7 @@ from collections import deque
 from datetime import date, datetime
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from threading import Lock
+from threading import Event, Lock, Thread
 from typing import Callable
 
 from .config import AppConfig
@@ -76,10 +76,24 @@ class SlideshowApp:
                     self._reload_config_if_needed()
                     next_frame_future = self._submit_next_frame(executor)
 
+                    stop_event = Event()
+                    watcher = self._start_config_watcher(stop_event)
+
                     current_display.show_image(
                         self.config.image_path,
                         current_display_time,
+                        stop_event=stop_event,
                     )
+
+                    changed = stop_event.is_set()
+                    stop_event.set()
+                    watcher.join(timeout=0.2)
+
+                    if changed:
+                        if not next_frame_future.done():
+                            next_frame_future.cancel()
+                        self._reload_config_if_needed()
+                        next_frame_future = self._submit_next_frame(executor)
 
                 except Exception as error:
                     print("Error:", error)
@@ -368,11 +382,24 @@ class SlideshowApp:
 
         previous_config = self.config
         self.config = new_config
-        self.client = ImmichClient(new_config)
+        search_changed = self._has_search_changed(previous_config, new_config)
+        client_changed = (
+            search_changed
+            or previous_config.api_key != new_config.api_key
+            or previous_config.immich_url != new_config.immich_url
+            or previous_config.use_art_api_key != new_config.use_art_api_key
+        )
+
+        if client_changed:
+            self.client = ImmichClient(new_config)
+        else:
+            # Keep the cache but point the client to the updated config.
+            self.client.config = new_config
         self.processor = ImageProcessor(
             screen_width=new_config.logical_width,
             screen_height=new_config.logical_height,
             grayscale=new_config.grayscale,
+            brightness=new_config.brightness,
             year_overlay_font_size=new_config.year_overlay_font_size,
             info_overlay_font_size=new_config.info_overlay_font_size,
             year_overlay_x=new_config.year_overlay_x,
@@ -385,8 +412,11 @@ class SlideshowApp:
         self.config.pics_dir.mkdir(parents=True, exist_ok=True)
 
         with self.state_lock:
-            self.asset_buffer.clear()
-            self.seen = deque(maxlen=new_config.seen_buffer_size)
+            if search_changed:
+                self.asset_buffer.clear()
+                self.seen = deque(maxlen=new_config.seen_buffer_size)
+            else:
+                self.seen = deque(self.seen, maxlen=new_config.seen_buffer_size)
 
         print("")
         print("Configuracion recargada")
@@ -406,6 +436,16 @@ class SlideshowApp:
             or previous_config.transition_ms != new_config.transition_ms
         )
 
+    def _has_search_changed(self, previous_config: AppConfig, new_config: AppConfig) -> bool:
+        return (
+            previous_config.search_mode != new_config.search_mode
+            or previous_config.active_people != new_config.active_people
+            or previous_config.person_ids != new_config.person_ids
+            or previous_config.smart_query != new_config.smart_query
+            or previous_config.smart_city != new_config.smart_city
+            or previous_config.search_size != new_config.search_size
+        )
+
     def _print_config_summary(self) -> None:
         self.config.pics_dir.mkdir(parents=True, exist_ok=True)
 
@@ -419,3 +459,20 @@ class SlideshowApp:
             print("Personas seleccionadas:", self.config.search_label)
         print("Tiempo por foto:", self.config.display_time, "segundos")
         print("Backend de display:", self.config.display_backend)
+
+    def _start_config_watcher(self, stop_event: Event) -> Thread:
+        watcher = Thread(target=self._watch_config_changes, args=(stop_event,), daemon=True)
+        watcher.start()
+        return watcher
+
+    def _watch_config_changes(self, stop_event: Event) -> None:
+        while not stop_event.is_set():
+            time.sleep(0.5)
+            try:
+                new_config = self.config_loader()
+            except ValueError:
+                continue
+
+            if new_config != self.config:
+                stop_event.set()
+                break

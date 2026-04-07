@@ -126,6 +126,7 @@ Jesus = "PERSON_ID_DE_IMMICH"
 - `seconds`: duracion de cada foto
 - `show_person_overlay`: activa overlays para `person` y `random`
 - `overlay_layout`: distribucion de overlays
+- `brightness`: factor de brillo aplicado despues de componer el fondo. Debe ser mayor que 0 (ej. 0.5 para mas oscuro, 1.0 sin cambio, 2.0 mas brillante). Sin limite maximo definido.
 - `transition_ms`: duracion de transicion en `pygame`
 - `orientation`: `landscape` (por defecto), `portrait` o `any` para filtrar fotos verticales o horizontales.
 - `rotation_degrees`: entero entre 0, 90, 180 y 270; si `orientation = "portrait"` el render rotado antes de enviarlo al display físico.

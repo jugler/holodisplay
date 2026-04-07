@@ -95,6 +95,7 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         display_time=namespace.seconds,
         display_backend=namespace.backend,
         grayscale=file_config.grayscale,
+        brightness=file_config.brightness,
         show_year_overlay=file_config.show_year_overlay,
         show_info_overlay=file_config.show_info_overlay,
         overlay_layout=file_config.overlay_layout,

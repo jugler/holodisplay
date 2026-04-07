@@ -9,6 +9,8 @@ screen_height = 1080
 backend = "pygame"
 seconds = 15
 grayscale = false
+# factor de brillo (1.0 = sin cambio, 0.5 = mas oscuro, 1.5 = mas brillante)
+brightness = 1.0
 # overlay del ano de la foto
 show_year_overlay = true
 # overlay superior con personas y/o ubicacion

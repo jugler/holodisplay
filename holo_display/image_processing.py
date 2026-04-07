@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 
 def _split_info_lines(value: str) -> list[str]:
@@ -16,6 +16,7 @@ class ImageProcessor:
         screen_width: int,
         screen_height: int,
         grayscale: bool = False,
+        brightness: float = 1.0,
         year_overlay_font_size: int | None = None,
         info_overlay_font_size: int | None = None,
         year_overlay_x: int | None = None,
@@ -26,6 +27,7 @@ class ImageProcessor:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.grayscale = grayscale
+        self.brightness = brightness
         self.year_overlay_font_size = year_overlay_font_size
         self.info_overlay_font_size = info_overlay_font_size
         self.year_overlay_x = year_overlay_x
@@ -47,6 +49,7 @@ class ImageProcessor:
         image = self._compose_background(image, width, height)
         if self.grayscale:
             image = image.convert("L").convert("RGB")
+        image = self._apply_brightness(image)
         return image, (width, height)
 
     def add_memory_overlay(
@@ -200,6 +203,11 @@ class ImageProcessor:
         y = (self.screen_height - new_height) // 2
         background.paste(resized, (x, y))
         return background
+
+    def _apply_brightness(self, image: Image.Image) -> Image.Image:
+        if self.brightness == 1.0:
+            return image
+        return ImageEnhance.Brightness(image).enhance(self.brightness)
 
     def _load_overlay_font(self) -> ImageFont.ImageFont:
         font_size = self.year_overlay_font_size or max(30, self.screen_height // 18)
