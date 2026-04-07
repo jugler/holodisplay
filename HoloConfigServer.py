@@ -174,17 +174,17 @@ PAGE_TEMPLATE = """
                         <input type="checkbox" name="grayscale" {% if grayscale %}checked{% endif %}>
                     </label>
                     <label>
-                        <span>Year Overlay</span>
-                        <input type="checkbox" name="show_year_overlay" {% if show_year_overlay %}checked{% endif %}>
+                        <span>Info Overlay</span>
+                        <input type="checkbox" name="show_info_overlay" {% if show_info_overlay %}checked{% endif %}>
                     </label>
                 </div>
                 <div class="toggle-row">
                     <label>
-                        <span>Info Overlay</span>
-                        <input type="checkbox" name="show_info_overlay" {% if show_info_overlay %}checked{% endif %}>
+                        <span>Year Overlay</span>
+                        <input type="checkbox" name="show_year_overlay" {% if show_year_overlay %}checked{% endif %}>
                     </label>
                     <label>
-                    <span>Segundos por foto</span>
+                        <span>Segundos por foto</span>
                         <input type="number" name="seconds" min="1" step="1" value="{{ seconds }}">
                     </label>
                 </div>
