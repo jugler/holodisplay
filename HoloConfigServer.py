@@ -7,6 +7,8 @@ from typing import Iterable, Mapping, Tuple
 
 import subprocess
 import tomllib
+import json
+import requests
 from flask import Flask, request, render_template_string, send_from_directory, abort
 
 app = Flask(__name__)
@@ -23,6 +25,115 @@ def serve_asset(filename: str):
     if not target.exists() or not target.is_file():
         abort(404)
     return send_from_directory(ASSETS_DIR, filename)
+
+
+def _current_frame_path_from_display(display_section: dict[str, object]) -> Path | None:
+    pics_dir = display_section.get("pics_dir")
+    if not isinstance(pics_dir, str):
+        return None
+    base = Path(pics_dir).expanduser()
+    return base / "frame.jpg"
+
+
+def _read_frame_metadata(frame_path: Path | None) -> tuple[bool, str | None]:
+    if frame_path is None:
+        return False, None
+    metadata_path = frame_path.parent / "immich.data"
+    if not metadata_path.exists():
+        return False, None
+    try:
+        raw = metadata_path.read_text(encoding="utf-8").strip()
+        if not raw:
+            return False, None
+        data = json.loads(raw)
+        return bool(data.get("isFavorite")), data.get("asset_id")
+    except Exception:
+        return False, None
+
+
+def _write_frame_metadata(frame_path: Path | None, asset_id: str, is_favorite: bool) -> None:
+    if frame_path is None:
+        return
+    metadata_path = frame_path.parent / "immich.data"
+    try:
+        metadata_path.write_text(json.dumps({"asset_id": asset_id, "isFavorite": bool(is_favorite)}) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _append_text(original: str | None, addition: str | None) -> str | None:
+    if not addition:
+        return original
+    if original:
+        return f"{original} / {addition}"
+    return addition
+
+
+def _process_favorite_action(
+    immediate_section: dict[str, object],
+    display_section: dict[str, object],
+    immich_section: dict[str, object],
+) -> tuple[str | None, str | None]:
+    raw_value = immediate_section.get("favorite", 0)
+    if isinstance(raw_value, bool):
+        trigger = raw_value
+    elif isinstance(raw_value, int):
+        trigger = raw_value == 1
+    else:
+        trigger = False
+    if not trigger:
+        return None, None
+
+    frame_path = _current_frame_path_from_display(display_section)
+    _, asset_id = _read_frame_metadata(frame_path)
+    if not asset_id:
+        return None, "No hay asset actual para marcar favorito"
+
+    immich_url = immich_section.get("url")
+    api_key = immich_section.get("api_key")
+    if not isinstance(immich_url, str) or not immich_url.strip():
+        return None, "No se ha configurado la URL de Immich"
+    if not isinstance(api_key, str) or not api_key.strip():
+        return None, "No se ha configurado la API key de Immich"
+
+    try:
+        response = requests.put(
+            f"{immich_url.rstrip('/')}/assets",
+            headers={"x-api-key": api_key.strip()},
+            json={"ids": [asset_id], "isFavorite": True},
+            timeout=15,
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        return None, f"Error marcando favorito: {exc}"
+
+    _apply_updates([("immediate_actions", "favorite", "0")])
+    _write_frame_metadata(frame_path, asset_id, True)
+    return "Favorito sincronizado", None
+
+
+@app.route("/current-frame")
+def current_frame() -> str:
+    try:
+        display_section, _, _, _, _, _ = _read_config_sections()
+    except ValueError:
+        abort(404)
+    frame_path = _current_frame_path_from_display(display_section)
+    if frame_path is None or not frame_path.exists():
+        abort(404)
+    return send_from_directory(frame_path.parent, frame_path.name)
+
+
+@app.route("/current-frame/meta")
+def current_frame_meta() -> str:
+    try:
+        display_section, _, _, _, _, _ = _read_config_sections()
+    except ValueError:
+        abort(404)
+    frame_path = _current_frame_path_from_display(display_section)
+    is_favorite, _ = _read_frame_metadata(frame_path)
+    return json.dumps({"isFavorite": is_favorite})
+
 
 MODE_OPTIONS: list[tuple[str, str]] = [
     ("person", "Personas"),
@@ -75,6 +186,61 @@ PAGE_TEMPLATE = """
             border-radius: 18px;
             padding: 1.25rem;
             box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45);
+        }
+        .thumbnail-card {
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .thumbnail-inner {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .thumbnail-card img {
+            max-width: 100%;
+            max-height: 320px;
+            display: block;
+        }
+        .thumbnail-card.portrait-preview .thumbnail-inner {
+            min-height: 360px;
+        }
+        .thumbnail-card.portrait-preview img {
+            max-height: 100%;
+            max-width: 100%;
+            transform: rotate(90deg);
+            transition: transform 0.25s ease;
+        }
+        .favorite-flag {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            margin: 0.85rem 0 0 0;
+        }
+        .favorite-btn {
+            width: auto;
+            background: transparent;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            display: inline-flex;
+            color: inherit;
+        }
+        .favorite-btn svg {
+            width: 32px;
+            height: 32px;
+            stroke: #fcd34d;
+            stroke-width: 1;
+        }
+        .favorite-btn.empty svg {
+            fill: transparent;
+        }
+        .favorite-btn.filled svg {
+            fill: #fcd34d;
         }
         label {
             display: flex;
@@ -163,6 +329,21 @@ PAGE_TEMPLATE = """
         {% endif %}
         {% if message %}
         <div class="alert success">{{ message }}</div>
+        {% endif %}
+        {% if thumbnail_available %}
+        <section class="card thumbnail-card{% if portrait_mode %} portrait-preview{% endif %}">
+            <div class="thumbnail-inner">
+                <img src="/current-frame?t={{ thumbnail_timestamp }}" alt="Foto actual" loading="lazy">
+            </div>
+            <div class="favorite-flag">
+                <form method="post" class="favorite-form">
+                    <input type="hidden" name="action" value="favorite">
+                    <button class="favorite-btn {% if is_favorite %}filled{% else %}empty{% endif %}" title="Marcar como favorito" type="submit">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="presentation" aria-hidden="true"><path d="M12 17.27L18.18 21 16.54 13.97 22 9.24 14.81 8.63 12 2 9.19 8.63 2 9.24 7.46 13.97 5.82 21z"></path></svg>
+                    </button>
+                </form>
+            </div>
+        </section>
         {% endif %}
         <section class="card">
             <form method="post">
@@ -292,6 +473,37 @@ PAGE_TEMPLATE = """
                 event.preventDefault();
             }
         });
+        const framePreview = document.querySelector('.thumbnail-card img');
+        const favoriteButton = document.querySelector('.favorite-btn');
+        if (framePreview) {
+            const refreshFrame = () => {
+                const timestamp = Date.now();
+                framePreview.src = `/current-frame?t=${timestamp}`;
+            };
+            const refreshMeta = () => {
+                fetch('/current-frame/meta')
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (!favoriteButton) {
+                            return;
+                        }
+                        if (data.isFavorite) {
+                            favoriteButton.classList.add('filled');
+                            favoriteButton.classList.remove('empty');
+                        } else {
+                            favoriteButton.classList.remove('filled');
+                            favoriteButton.classList.add('empty');
+                        }
+                    })
+                    .catch(() => {});
+            };
+            const intervalId = setInterval(() => {
+                refreshFrame();
+                refreshMeta();
+            }, 5000);
+            framePreview.addEventListener('error', () => clearInterval(intervalId));
+            refreshMeta();
+        }
     </script>
 </body>
 </html>
@@ -313,7 +525,7 @@ def _load_toml(path: Path) -> dict[str, object]:
         raise ValueError(f"{path.name} no es TOML válido: {error}") from error
 
 
-def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[str, object], float, str]:
+def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[str, object], float, str, dict[str, object]]:
     raw = _load_toml(CONFIG_PATH)
     display = raw.get("display")
     if not isinstance(display, dict):
@@ -330,8 +542,11 @@ def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[
         name_value = instance_section.get("name")
         if isinstance(name_value, str) and name_value.strip():
             instance_label = name_value.strip()
+    immich_section = raw.get("immich")
+    if not isinstance(immich_section, dict):
+        immich_section = {}
     mtime = CONFIG_PATH.stat().st_mtime
-    return display, search, immediate, mtime, instance_label
+    return display, search, immediate, mtime, instance_label, immich_section
 
 
 def _load_people() -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
@@ -487,13 +702,14 @@ def index() -> str:
     error = None
     people_error = None
     try:
-        display_section, search_section, immediate_section, mtime, instance_name = _read_config_sections()
+        display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
     except ValueError as exc:
         display_section = {}
         search_section = {}
         immediate_section = {}
         mtime = 0
         instance_name = ""
+        immich_section = {}
         error = str(exc)
     try:
         people_map, alias_map = _load_people()
@@ -548,7 +764,7 @@ def index() -> str:
                 updates.append(("search", "default_people", _format_toml_value(resolved)))
                 _apply_updates(updates)
                 message = "Configuración guardada"
-                display_section, search_section, immediate_section, mtime, instance_name = _read_config_sections()
+                display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
                 default_people_list = search_section.get("default_people")
                 if not isinstance(default_people_list, list):
                     default_people_list = []
@@ -559,7 +775,14 @@ def index() -> str:
             try:
                 _apply_updates([("immediate_actions", "next", "1")])
                 message = "Siguiente foto solicitada"
-                _, _, immediate_section, _, _ = _read_config_sections()
+                _, _, immediate_section, _, _, _ = _read_config_sections()
+            except ValueError as exc:
+                error = str(exc)
+        elif action == "favorite":
+            try:
+                _apply_updates([("immediate_actions", "favorite", "1")])
+                display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
+                message = "Favorito solicitado"
             except ValueError as exc:
                 error = str(exc)
         elif action == "restart_holoconfig":
@@ -601,10 +824,24 @@ def index() -> str:
         else:
             error = "Acción desconocida"
     selected_alias = None
+    favorite_note, favorite_err = _process_favorite_action(
+        immediate_section,
+        display_section,
+        immich_section,
+    )
+    if favorite_note:
+        display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
+    message = _append_text(message, favorite_note)
+    error = _append_text(error, favorite_err)
     for alias_name, members in alias_map.items():
         if len(members) == len(default_people_list) and set(members) == set(default_people_list):
             selected_alias = alias_name
             break
+    frame_path = _current_frame_path_from_display(display_section)
+    thumbnail_available = bool(frame_path and frame_path.exists())
+    thumbnail_timestamp = frame_path.stat().st_mtime if thumbnail_available else 0
+    portrait_mode = str(display_section.get("orientation", "")).lower() == "portrait"
+    is_favorite, _ = _read_frame_metadata(frame_path)
     context = {
         "grayscale": bool(display_section.get("grayscale")),
         "show_year_overlay": bool(display_section.get("show_year_overlay")),
@@ -623,6 +860,10 @@ def index() -> str:
         "message": message,
         "error": error,
         "sample_people": ", ".join(default_people_list[:3]) if default_people_list else "Jesus, Vero",
+        "thumbnail_available": thumbnail_available,
+        "thumbnail_timestamp": thumbnail_timestamp,
+        "portrait_mode": portrait_mode,
+        "is_favorite": is_favorite,
         "instance_name": instance_name,
     }
     return render_template_string(PAGE_TEMPLATE, **context)

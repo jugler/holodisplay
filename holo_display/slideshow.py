@@ -8,6 +8,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Event, Lock, Thread
 from typing import Callable
+import json
 
 from .config import AppConfig
 
@@ -49,6 +50,7 @@ class SlideshowApp:
         self.state_lock = Lock()
 
     def run_forever(self) -> None:
+        self._reset_immediate_next()
         self._print_config_summary()
 
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -70,6 +72,7 @@ class SlideshowApp:
 
                     prepared.image.save(self.config.tmp_path)
                     self.config.tmp_path.replace(self.config.image_path)
+                    self._write_metadata(prepared.asset)
 
                     current_display = self.display
                     current_display_time = self.config.display_time
@@ -517,3 +520,18 @@ class SlideshowApp:
             path.write_text(replaced, encoding="utf-8")
         except Exception as error:
             print(f"No se pudo escribir config para resetear immediate_actions: {error}")
+
+    def _write_metadata(self, asset: dict) -> None:
+        asset_id = asset.get("id")
+        if not isinstance(asset_id, str) or not asset_id:
+            return
+        is_favorite = asset.get("isFavorite", asset.get("is_favorite", False))
+        metadata = {
+            "asset_id": asset_id,
+            "isFavorite": bool(is_favorite),
+        }
+        try:
+            metadata_path = self.config.pics_dir / "immich.data"
+            metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        except Exception as error:
+            print(f"No se pudo escribir immich.data: {error}")
