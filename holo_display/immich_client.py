@@ -12,6 +12,14 @@ class ImmichClient:
         self.config = config
         self.asset_details_cache: dict[str, dict] = {}
 
+    @staticmethod
+    def _human_size(size: int) -> str:
+        for unit in ("B", "KB", "MB", "GB"):
+            if size < 1024:
+                return f"{size:.2f}{unit}"
+            size /= 1024
+        return f"{size:.2f}TB"
+
     def fetch_assets(self) -> list[dict]:
         if self.config.search_mode == "memories":
             print("Consultando memories...")
@@ -79,11 +87,13 @@ class ImmichClient:
 
     def fetch_thumbnail(self, asset_id: str) -> bytes:
         response = requests.get(
-            f"{self.config.immich_url}/assets/{asset_id}/thumbnail?size=preview",
+            f"{self.config.immich_url}/assets/{asset_id}/original",
             headers=self.config.headers,
             timeout=30,
         )
         response.raise_for_status()
+        size = len(response.content)
+        print(f"Asset {asset_id} descargado ({self._human_size(size)})")
         return response.content
 
     def fetch_asset_details(self, asset_id: str) -> dict:
@@ -115,9 +125,10 @@ class ImmichClient:
     def _search_payload(self, page: str | int, person_id: str | None = None) -> dict:
         if self.config.search_mode == "smart":
             payload = {
-                "query": self.config.smart_query,
+                "query": "pets",
                 "size": str(self.config.search_size),
                 "page": page,
+                "language": "english",
             }
             if self.config.smart_city:
                 payload["city"] = self.config.smart_city
