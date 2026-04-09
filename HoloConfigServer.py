@@ -155,13 +155,13 @@ PAGE_TEMPLATE = """
     <style>
         :root {
             font-family: -apple-system, system-ui, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            background: #0b0b0b;
+            color: #f8fafc;
         }
         body {
             margin: 0;
             min-height: 100vh;
-            background: linear-gradient(160deg, #0f172a, #1e293b);
+            background: linear-gradient(160deg, #1c1c1c, #0a0a0a 65%, #050505);
             display: flex;
             justify-content: center;
             align-items: flex-start;

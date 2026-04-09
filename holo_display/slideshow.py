@@ -506,15 +506,17 @@ class SlideshowApp:
             print(f"No se pudo leer config para resetear immediate_actions: {error}")
             return
 
-        # Replace existing setting if present; otherwise append section.
-        pattern = r"(\[immediate_actions\][^\[]*?next\s*=\s*)1"
+        pattern = r"(\[immediate_actions\][^\[]*?next\s*=\s*)(1)"
         replaced, count = re.subn(pattern, r"\g<1>0", text, flags=re.IGNORECASE | re.DOTALL)
 
         if count == 0:
-            # Append section
-            if not text.endswith("\n"):
-                text += "\n"
-            replaced += "\n[immediate_actions]\nnext = 0\n"
+            if "[immediate_actions]" not in text:
+                if not text.endswith("\n"):
+                    text += "\n"
+                text += "\n[immediate_actions]\nnext = 0\n"
+                replaced = text
+            else:
+                replaced = text
 
         try:
             path.write_text(replaced, encoding="utf-8")
