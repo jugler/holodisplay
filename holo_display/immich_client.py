@@ -79,6 +79,17 @@ class ImmichClient:
                     f"{skipped} descartadas. Total {len(results)}"
                 )
             next_page = self._extract_next_page(payload)
+            if (
+                self.config.search_mode == "smart"
+                and len(results) >= self.config.smart_result_limit
+            ):
+                print(
+                    (
+                        f"Smart mode: detenido después de {self.config.smart_result_limit} "
+                        "resultados para privilegiar los más relevantes"
+                    )
+                )
+                break
 
         if self.config.search_mode != "memories":
             self._shuffle_assets(results)
@@ -125,10 +136,10 @@ class ImmichClient:
     def _search_payload(self, page: str | int, person_id: str | None = None) -> dict:
         if self.config.search_mode == "smart":
             payload = {
-                "query": "pets",
+                "query": self.config.smart_query,
                 "size": str(self.config.search_size),
                 "page": page,
-                "language": "english",
+                "language": "es",
             }
             if self.config.smart_city:
                 payload["city"] = self.config.smart_city

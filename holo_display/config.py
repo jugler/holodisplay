@@ -13,6 +13,7 @@ DEFAULT_DISPLAY_TIME = 3
 DEFAULT_SEARCH_SIZE = 1000
 DEFAULT_SEEN_BUFFER_SIZE = 100
 DEFAULT_DISPLAY_BACKEND = "framebuffer"
+DEFAULT_SMART_RESULT_LIMIT = 100
 DEFAULT_TRANSITION_MS = 700
 DEFAULT_ROTATION_DEGREES = 0
 DEFAULT_BRIGHTNESS = 1.0
@@ -48,6 +49,7 @@ class FileConfig:
     search_mode: str
     smart_query: str | None
     smart_city: str | None
+    smart_result_limit: int
     default_people: tuple[str, ...]
     persons: dict[str, str]
     aliases: dict[str, tuple[str, ...]]
@@ -87,6 +89,7 @@ class AppConfig:
     search_mode: str = "person"
     smart_query: str | None = None
     smart_city: str | None = None
+    smart_result_limit: int = DEFAULT_SMART_RESULT_LIMIT
     transition_ms: int = DEFAULT_TRANSITION_MS
     search_size: int = DEFAULT_SEARCH_SIZE
     seen_buffer_size: int = DEFAULT_SEEN_BUFFER_SIZE
@@ -286,6 +289,12 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
             "search.seen_buffer_size",
             DEFAULT_SEEN_BUFFER_SIZE,
         ),
+        smart_result_limit=_optional_non_negative_int(
+            search,
+            "smart_result_limit",
+            "search.smart_result_limit",
+        )
+        or DEFAULT_SMART_RESULT_LIMIT,
         search_mode=search_mode,
         smart_query=smart_query,
         smart_city=_optional_str(search, "smart_city", "search.smart_city"),

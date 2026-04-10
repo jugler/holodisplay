@@ -121,6 +121,7 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         transition_ms=namespace.speed,
         search_size=file_config.search_size,
         seen_buffer_size=file_config.seen_buffer_size,
+        smart_result_limit=file_config.smart_result_limit,
         use_art_api_key=art_flag,
         immediate_next=file_config.immediate_next,
         config_path=Path(config_path).expanduser(),

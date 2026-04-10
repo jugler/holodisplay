@@ -414,6 +414,10 @@ PAGE_TEMPLATE = """
                         <span class="note">Ej: {{ sample_people }}</span>
                     </label>
                 </div>
+                <label>
+                    <span>Smart limit</span>
+                    <input type="number" name="smart_result_limit" min="1" step="1" value="{{ smart_limit }}">
+                </label>
                 <button type="submit">Guardar</button>
                 <p class="status-line">Última actualización: {{ last_updated }}</p>
             </form>
@@ -746,6 +750,19 @@ def index() -> str:
                     raise ValueError("Brillo debe ser un número") from exc
                 if brightness <= 0:
                     raise ValueError("Brillo debe ser mayor que 0")
+                smart_limit_raw = (request.form.get("smart_result_limit") or "").strip()
+                smart_limit_current = search_section.get("smart_result_limit")
+                if isinstance(smart_limit_current, int) and smart_limit_current > 0:
+                    smart_limit_value = smart_limit_current
+                else:
+                    smart_limit_value = 100
+                if smart_limit_raw:
+                    try:
+                        smart_limit_value = int(smart_limit_raw)
+                    except ValueError as exc:
+                        raise ValueError("Smart limit debe ser un número entero") from exc
+                    if smart_limit_value < 1:
+                        raise ValueError("Smart limit debe ser al menos 1")
                 updates.extend([
                     ("display", "grayscale", _format_toml_value(grayscale)),
                     ("display", "seconds", _format_toml_value(seconds)),
@@ -759,6 +776,7 @@ def index() -> str:
                     if not smart_query:
                         raise ValueError("Es necesario indicar una smart query")
                     updates.append(("search", "smart_query", _format_toml_string(smart_query)))
+                updates.append(("search", "smart_result_limit", _format_toml_value(smart_limit_value)))
                 default_people_raw = request.form.get("default_people", "")
                 resolved = _parse_people_field(default_people_raw, people_map, alias_map)
                 updates.append(("search", "default_people", _format_toml_value(resolved)))
@@ -842,6 +860,9 @@ def index() -> str:
     thumbnail_timestamp = frame_path.stat().st_mtime if thumbnail_available else 0
     portrait_mode = str(display_section.get("orientation", "")).lower() == "portrait"
     is_favorite, _ = _read_frame_metadata(frame_path)
+    smart_limit_value = search_section.get("smart_result_limit")
+    if not isinstance(smart_limit_value, int) or smart_limit_value < 1:
+        smart_limit_value = 100
     context = {
         "grayscale": bool(display_section.get("grayscale")),
         "show_year_overlay": bool(display_section.get("show_year_overlay")),
@@ -864,6 +885,7 @@ def index() -> str:
         "thumbnail_timestamp": thumbnail_timestamp,
         "portrait_mode": portrait_mode,
         "is_favorite": is_favorite,
+        "smart_limit": smart_limit_value,
         "instance_name": instance_name,
     }
     return render_template_string(PAGE_TEMPLATE, **context)

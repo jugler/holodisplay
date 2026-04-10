@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import json
 import re
 import time
 from collections import deque
 from datetime import date, datetime
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Callable
-import json
 
 from .config import AppConfig
 
@@ -27,6 +28,7 @@ class PreparedFrame:
     image: object
     width: int
     height: int
+    original_bytes: bytes
 
 
 class SlideshowApp:
@@ -71,6 +73,8 @@ class SlideshowApp:
                     )
 
                     prepared.image.save(self.config.tmp_path)
+                    self._write_postprocessed(prepared.image)
+                    self._write_original_asset(prepared.asset, prepared.original_bytes)
                     self.config.tmp_path.replace(self.config.image_path)
                     self._write_metadata(prepared.asset)
 
@@ -201,6 +205,7 @@ class SlideshowApp:
                 image=image,
                 width=width,
                 height=height,
+                original_bytes=image_bytes,
             )
 
     def _was_seen(self, asset_id: str) -> bool:
@@ -537,3 +542,19 @@ class SlideshowApp:
             metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
         except Exception as error:
             print(f"No se pudo escribir immich.data: {error}")
+
+    def _write_original_asset(self, asset: dict, data: bytes) -> None:
+        file_name = asset.get("originalFileName", "original")
+        suffix = Path(file_name).suffix or ".img"
+        path = self.config.pics_dir / f"original{suffix}"
+        try:
+            path.write_bytes(data)
+        except Exception as error:
+            print(f"No se pudo guardar el asset original: {error}")
+
+    def _write_postprocessed(self, image: object) -> None:
+        path = self.config.pics_dir / "postprocesada.jpg"
+        try:
+            image.save(path, format="JPEG")
+        except Exception as error:
+            print(f"No se pudo guardar la imagen postprocesada: {error}")
