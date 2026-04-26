@@ -12,14 +12,6 @@ class ImmichClient:
         self.config = config
         self.asset_details_cache: dict[str, dict] = {}
 
-    @staticmethod
-    def _human_size(size: int) -> str:
-        for unit in ("B", "KB", "MB", "GB"):
-            if size < 1024:
-                return f"{size:.2f}{unit}"
-            size /= 1024
-        return f"{size:.2f}TB"
-
     def fetch_assets(self) -> list[dict]:
         if self.config.search_mode == "memories":
             print("Consultando memories...")
@@ -103,8 +95,6 @@ class ImmichClient:
             timeout=30,
         )
         response.raise_for_status()
-        size = len(response.content)
-        print(f"Asset {asset_id} descargado ({self._human_size(size)})")
         return response.content
 
     def fetch_asset_details(self, asset_id: str) -> dict:

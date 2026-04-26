@@ -78,6 +78,12 @@ class SlideshowApp:
                     self.config.tmp_path.replace(self.config.image_path)
                     self._write_metadata(prepared.asset)
 
+                    print(
+                        "Guardado:",
+                        f"{self._original_disk_basename(prepared.asset)}, "
+                        f"postprocesada.jpg, {self.config.image_path.name}",
+                    )
+
                     current_display = self.display
                     current_display_time = self.config.display_time
                     self._mark_seen(prepared.asset["id"])
@@ -541,10 +547,14 @@ class SlideshowApp:
         except Exception as error:
             print(f"No se pudo escribir immich.data: {error}")
 
-    def _write_original_asset(self, asset: dict, data: bytes) -> None:
+    @staticmethod
+    def _original_disk_basename(asset: dict) -> str:
         file_name = asset.get("originalFileName", "original")
         suffix = Path(file_name).suffix or ".img"
-        path = self.config.pics_dir / f"original{suffix}"
+        return f"original{suffix}"
+
+    def _write_original_asset(self, asset: dict, data: bytes) -> None:
+        path = self.config.pics_dir / self._original_disk_basename(asset)
         try:
             path.write_bytes(data)
         except Exception as error:
