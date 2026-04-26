@@ -12,7 +12,6 @@ DEFAULT_SCREEN_HEIGHT = 1080
 DEFAULT_DISPLAY_TIME = 3
 DEFAULT_SEARCH_SIZE = 1000
 DEFAULT_SEEN_BUFFER_SIZE = 100
-DEFAULT_DISPLAY_BACKEND = "framebuffer"
 DEFAULT_SMART_RESULT_LIMIT = 100
 DEFAULT_TRANSITION_MS = 700
 DEFAULT_ROTATION_DEGREES = 0
@@ -31,7 +30,6 @@ class FileConfig:
     screen_width: int
     screen_height: int
     display_time: int
-    display_backend: str
     grayscale: bool
     brightness: float
     show_year_overlay: bool
@@ -65,7 +63,6 @@ class AppConfig:
     immich_url: str
     api_key: str
     display_time: int
-    display_backend: str
     grayscale: bool
     brightness: float
     show_year_overlay: bool
@@ -196,12 +193,6 @@ def load_file_config(path: str | Path = DEFAULT_CONFIG_PATH, people_path: str | 
         screen_width=_require_int(display, "screen_width", "display.screen_width", DEFAULT_SCREEN_WIDTH),
         screen_height=_require_int(display, "screen_height", "display.screen_height", DEFAULT_SCREEN_HEIGHT),
         display_time=_require_int(display, "seconds", "display.seconds", DEFAULT_DISPLAY_TIME),
-        display_backend=_require_str(
-            display,
-            "backend",
-            "display.backend",
-            DEFAULT_DISPLAY_BACKEND,
-        ),
         grayscale=_require_bool(
             display,
             "grayscale",

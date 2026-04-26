@@ -7,7 +7,6 @@ from pathlib import Path
 from .config import (
     AppConfig,
     DEFAULT_CONFIG_PATH,
-    DEFAULT_DISPLAY_BACKEND,
     DEFAULT_DISPLAY_TIME,
     DEFAULT_TRANSITION_MS,
     FileConfig,
@@ -94,7 +93,6 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         immich_url=file_config.immich_url,
         api_key=api_key_value,
         display_time=namespace.seconds,
-        display_backend=namespace.backend,
         grayscale=file_config.grayscale,
         brightness=file_config.brightness,
         show_year_overlay=file_config.show_year_overlay,
@@ -170,24 +168,7 @@ def _build_parser(file_config: FileConfig) -> argparse.ArgumentParser:
         help="Muestra fotos aleatorias de toda la libreria.",
     )
 
-    backend_group = parser.add_mutually_exclusive_group()
-    backend_group.add_argument(
-        "--pygame",
-        dest="backend",
-        action="store_const",
-        const="pygame",
-        help="Usa el backend pygame.",
-    )
-    backend_group.add_argument(
-        "--framebuffer",
-        dest="backend",
-        action="store_const",
-        const="framebuffer",
-        help="Usa el backend framebuffer.",
-    )
-
     parser.set_defaults(
-        backend=file_config.display_backend or DEFAULT_DISPLAY_BACKEND,
         seconds=file_config.display_time or DEFAULT_DISPLAY_TIME,
         speed=file_config.transition_ms or DEFAULT_TRANSITION_MS,
     )

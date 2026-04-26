@@ -3,20 +3,18 @@ from __future__ import annotations
 import sys
 
 from .cli import build_config
-from .display import FramebufferDisplay, PygameDisplay
+from .display import PygameDisplay
 from .image_processing import ImageProcessor
 from .immich_client import ImmichClient
 from .slideshow import SlideshowApp
 
 
 def build_display(config):
-    if config.display_backend == "pygame":
-        return PygameDisplay(
-            screen_width=config.screen_width,
-            screen_height=config.screen_height,
-            transition_ms=config.transition_ms,
-        )
-    return FramebufferDisplay()
+    return PygameDisplay(
+        screen_width=config.screen_width,
+        screen_height=config.screen_height,
+        transition_ms=config.transition_ms,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

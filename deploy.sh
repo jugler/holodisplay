@@ -9,7 +9,7 @@ PEOPLE_PATH="$PROJECT_DIR/people.toml"
 typeset -A HOST_CONFIGS
 HOST_CONFIGS=(
   "pi@frame" "$PROJECT_DIR/config.frame.toml"
-  "pi@holoframe" "$PROJECT_DIR/config.holoframe.toml"
+  #"pi@holoframe" "$PROJECT_DIR/config.holoframe.toml"
   "pi@holothot.local" "$PROJECT_DIR/config.holothot.toml"
 )
 

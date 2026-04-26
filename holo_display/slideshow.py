@@ -444,8 +444,7 @@ class SlideshowApp:
         new_config: AppConfig,
     ) -> bool:
         return (
-            previous_config.display_backend != new_config.display_backend
-            or previous_config.screen_width != new_config.screen_width
+            previous_config.screen_width != new_config.screen_width
             or previous_config.screen_height != new_config.screen_height
             or previous_config.transition_ms != new_config.transition_ms
         )
@@ -472,7 +471,6 @@ class SlideshowApp:
         else:
             print("Personas seleccionadas:", self.config.search_label)
         print("Tiempo por foto:", self.config.display_time, "segundos")
-        print("Backend de display:", self.config.display_backend)
 
     def _start_config_watcher(self, stop_event: Event) -> Thread:
         watcher = Thread(target=self._watch_config_changes, args=(stop_event,), daemon=True)

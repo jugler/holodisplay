@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 from pathlib import Path
 from threading import Event
@@ -11,40 +10,6 @@ from typing import Protocol
 class DisplayBackend(Protocol):
     def show_image(self, path: Path, display_time: int, stop_event: Event | None = None) -> None:
         ...
-
-
-class FramebufferDisplay:
-    def show_image(self, path: Path, display_time: int, stop_event: Event | None = None) -> None:
-        subprocess.run(["killall", "fbi"], stderr=subprocess.DEVNULL, check=False)
-        process = subprocess.Popen(
-            [
-                "fbi",
-                "-T",
-                "1",
-                "-d",
-                "/dev/fb0",
-                "-a",
-                "-noverbose",
-                str(path),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        time.sleep(0.2)
-
-        end_time = time.time() + display_time
-        while time.time() < end_time:
-            if stop_event is not None and stop_event.is_set():
-                break
-            time.sleep(0.1)
-
-        # Try to stop the running viewer early when requested.
-        try:
-            process.terminate()
-            process.wait(timeout=1)
-        except Exception:
-            process.kill()
 
 
 class PygameDisplay:
@@ -86,7 +51,7 @@ class PygameDisplay:
             import pygame
         except ImportError as error:
             raise RuntimeError(
-                "El backend pygame requiere instalar pygame en el dispositivo."
+                "HoloDisplay requiere instalar pygame en el dispositivo."
             ) from error
 
         driver_candidates = self._candidate_drivers()

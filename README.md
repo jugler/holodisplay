@@ -21,11 +21,7 @@ Dependencias de Python:
 
 - `requests`
 - `Pillow`
-- `pygame` si vas a usar el backend `pygame`
-
-Dependencias del sistema:
-
-- `fbi` si vas a usar el backend `framebuffer`
+- `pygame` (render y transiciones en pantalla)
 
 ## Bajar el proyecto
 
@@ -44,21 +40,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install requests pillow pygame
-```
-
-Si no vas a usar `pygame`, puedes omitirlo:
-
-```bash
-pip install requests pillow
-```
-
-### Dependencia extra para `framebuffer`
-
-En Raspberry Pi o Linux con framebuffer:
-
-```bash
-sudo apt update
-sudo apt install fbi
 ```
 
 ## Configuracion
@@ -89,7 +70,6 @@ api_key = "TU_API_KEY"
 pics_dir = "/home/pi/HoloDisplay/pics"
 screen_width = 1920
 screen_height = 1080
-backend = "pygame"
 seconds = 15
 show_person_overlay = true
 # overlay_layout:
@@ -122,12 +102,11 @@ Jesus = "PERSON_ID_DE_IMMICH"
 `[display]`
 
 - `pics_dir`: carpeta temporal donde se escriben los JPG que luego se muestran
-- `backend`: `pygame` o `framebuffer`
 - `seconds`: duracion de cada foto
 - `show_person_overlay`: activa overlays para `person` y `random`
 - `overlay_layout`: distribucion de overlays
 - `brightness`: factor de brillo aplicado despues de componer el fondo. Debe ser mayor que 0 (ej. 0.5 para mas oscuro, 1.0 sin cambio, 2.0 mas brillante). Sin limite maximo definido.
-- `transition_ms`: duracion de transicion en `pygame`
+- `transition_ms`: duracion de la transicion entre fotos (milisegundos)
 - `orientation`: `landscape` (por defecto), `portrait` o `any` para filtrar fotos verticales o horizontales.
 - `rotation_degrees`: entero entre 0, 90, 180 y 270; si `orientation = "portrait"` el render rotado antes de enviarlo al display físico.
 - El overlay de ubicación divide ciudad y país en líneas separadas (acortando `United States of America` a `USA`) solo cuando el modo no es `landscape`; en `landscape` se mantiene como una sola línea tipo `Berlin, Germany`.
@@ -328,21 +307,12 @@ Eso significa que puedes cambiar:
 - `seconds`
 - overlays
 - layout
-- backend
 
 y el cambio se aplicara en la siguiente imagen, sin reiniciar el proceso.
 
-## Backends de display
+## Display (pygame)
 
-### `pygame`
-
-Recomendado si quieres transiciones suaves.
-
-```toml
-[display]
-backend = "pygame"
-transition_ms = 700
-```
+La salida usa pygame (SDL). Ajusta `transition_ms` en `[display]` para la duracion del fundido entre fotos.
 
 Si hace falta, puedes controlar el driver SDL con la variable:
 
@@ -354,15 +324,6 @@ o por ejemplo:
 
 ```bash
 export IMMICH_SDL_DRIVER=fbcon,x11
-```
-
-### `framebuffer`
-
-Usa `fbi` para escribir la imagen al framebuffer.
-
-```toml
-[display]
-backend = "framebuffer"
 ```
 
 ## Deploy rapido
