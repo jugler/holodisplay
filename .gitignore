@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+debug/
 config.toml
 config.frame.toml
 config.holodisplay.toml

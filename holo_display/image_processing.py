@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from io import BytesIO
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 
 def _split_info_lines(value: str) -> list[str]:
@@ -40,8 +41,22 @@ class ImageProcessor:
         image_bytes: bytes,
         allow_vertical: bool = False,
     ) -> tuple[Image.Image, tuple[int, int]]:
-        image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        image = Image.open(BytesIO(image_bytes))
+        before_size = image.size
+        exif = image.getexif()
+        orientation_value = exif.get(274) if exif is not None else None
+        image = ImageOps.exif_transpose(image).convert("RGB")
         width, height = image.size
+
+        if os.environ.get("HOLODISPLAY_DEBUG_ORIENTATION") == "1":
+            after_size = (width, height)
+            if before_size != after_size or orientation_value not in (None, 1):
+                print(
+                    "EXIF transpose:",
+                    f"orientation={orientation_value},",
+                    f"before={before_size[0]}x{before_size[1]},",
+                    f"after={after_size[0]}x{after_size[1]}",
+                )
 
         if height > width and not allow_vertical:
             raise ValueError("vertical_image")

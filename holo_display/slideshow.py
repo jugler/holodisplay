@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from collections import deque
@@ -57,9 +58,20 @@ class SlideshowApp:
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             next_frame_future = self._submit_next_frame(executor)
+            first_frame = True
 
             while True:
                 try:
+                    # Splash SOLO al arranque: mientras se descarga/procesa la primera imagen.
+                    if first_frame:
+                        self.display.show_splash_until(
+                            lambda: next_frame_future.done(),
+                            orientation=self.config.orientation,
+                            rotation_degrees=self.config.rotation_degrees,
+                            cached_frames=24,
+                            fps=30,
+                        )
+
                     prepared = next_frame_future.result()
                     if prepared is None:
                         time.sleep(5)
@@ -72,11 +84,36 @@ class SlideshowApp:
                         prepared.height,
                     )
 
-                    prepared.image.save(self.config.tmp_path)
-                    self._write_postprocessed(prepared.image)
-                    self._write_original_asset(prepared.asset, prepared.original_bytes)
-                    self.config.tmp_path.replace(self.config.image_path)
-                    self._write_metadata(prepared.asset)
+                    if first_frame:
+                        # Persistencia a disco: mantener splash hasta que `image_path` esté lista.
+                        persist_done = Event()
+
+                        def _persist_first_frame() -> None:
+                            try:
+                                self._save_frame_jpeg(prepared.image, self.config.tmp_path)
+                                self._write_postprocessed(prepared.image)
+                                self._write_original_asset(prepared.asset, prepared.original_bytes)
+                                self.config.tmp_path.replace(self.config.image_path)
+                                self._write_metadata(prepared.asset)
+                            finally:
+                                persist_done.set()
+
+                        Thread(target=_persist_first_frame, name="persist_first_frame", daemon=True).start()
+
+                        self.display.show_splash_until(
+                            lambda: persist_done.is_set() and self.config.image_path.exists(),
+                            orientation=self.config.orientation,
+                            rotation_degrees=self.config.rotation_degrees,
+                            cached_frames=24,
+                            fps=30,
+                        )
+                    else:
+                        # En transiciones/\"next image\" no mostrar splash: persistir inline como antes.
+                        self._save_frame_jpeg(prepared.image, self.config.tmp_path)
+                        self._write_postprocessed(prepared.image)
+                        self._write_original_asset(prepared.asset, prepared.original_bytes)
+                        self.config.tmp_path.replace(self.config.image_path)
+                        self._write_metadata(prepared.asset)
 
                     print(
                         "Guardado:",
@@ -98,6 +135,7 @@ class SlideshowApp:
                         current_display_time,
                         stop_event=stop_event,
                     )
+                    first_frame = False
 
                     changed = stop_event.is_set()
                     stop_event.set()
@@ -159,6 +197,25 @@ class SlideshowApp:
             image_bytes = self.client.fetch_thumbnail(asset_id)
 
             try:
+                if os.environ.get("HOLODISPLAY_DEBUG_ORIENTATION") == "1":
+                    exif_info = overlay_asset.get("exifInfo")
+                    exif_orientation = None
+                    exif_w = None
+                    exif_h = None
+                    if isinstance(exif_info, dict):
+                        exif_orientation = exif_info.get("orientation")
+                        exif_w = exif_info.get("exifImageWidth") or exif_info.get("imageWidth")
+                        exif_h = exif_info.get("exifImageHeight") or exif_info.get("imageHeight")
+                    aw = overlay_asset.get("width")
+                    ah = overlay_asset.get("height")
+                    print(
+                        "Asset debug:",
+                        f"id={asset_id},",
+                        f"file={overlay_asset.get('originalFileName', 'unknown')},",
+                        f"assetDims={aw}x{ah},",
+                        f"exifDims={exif_w}x{exif_h},",
+                        f"exifOrientation={exif_orientation}",
+                    )
                 image, (width, height) = self.processor.prepare(
                     image_bytes,
                     allow_vertical=(
@@ -326,6 +383,9 @@ class SlideshowApp:
             width = exif_info.get("exifImageWidth") or exif_info.get("imageWidth")
             height = exif_info.get("exifImageHeight") or exif_info.get("imageHeight")
             if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+                orientation = exif_info.get("orientation")
+                if isinstance(orientation, int) and orientation in {5, 6, 7, 8}:
+                    return height, width
                 return width, height
         width = asset.get("width")
         height = asset.get("height")
@@ -563,6 +623,24 @@ class SlideshowApp:
     def _write_postprocessed(self, image: object) -> None:
         path = self.config.pics_dir / "postprocesada.jpg"
         try:
-            image.save(path, format="JPEG")
+            # Evitar pérdida fuerte por defaults de Pillow (quality~75 + chroma subsampling).
+            self._save_frame_jpeg(image, path)
         except Exception as error:
             print(f"No se pudo guardar la imagen postprocesada: {error}")
+
+    @staticmethod
+    def _save_frame_jpeg(image: object, path: Path) -> None:
+        """
+        Guarda el frame listo para display priorizando calidad visual.
+
+        Nota: seguimos usando JPEG por compatibilidad/velocidad, pero con parámetros
+        que evitan el bajón de calidad típico de los defaults.
+        """
+        image.save(
+            path,
+            format="JPEG",
+            quality=95,
+            subsampling=0,
+            optimize=True,
+            progressive=True,
+        )

@@ -31,6 +31,7 @@ rsync -av \
   --exclude '__pycache__' \
   --exclude '*.pyc' \
   "$PROJECT_DIR/HoloDisplay.py" \
+  "$PROJECT_DIR/splashscreen.py" \
   "$PROJECT_DIR/holo_display" \
   "$PROJECT_DIR/center_guide.py" \
   "$PROJECT_DIR/export_people.py" \

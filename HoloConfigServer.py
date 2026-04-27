@@ -17,6 +17,8 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.toml"
 PEOPLE_PATH = BASE_DIR / "people.toml"
 ASSETS_DIR = BASE_DIR / "assets"
+HOLOTHOT_SERVICE = "holothot.service"
+HOLOTHOT_PLAYLIST_PATH = Path("/mnt/holothot/processed/playlist.mp4")
 
 
 @app.route("/assets/<path:filename>")
@@ -377,7 +379,11 @@ PAGE_TEMPLATE = """
                 </div>
                 <label>
                     <span>Brillo</span>
-                    <input type="number" name="brightness" step="0.1" min="0.1" value="{{ brightness }}">
+                    <select name="brightness">
+                        <option value="1" {% if brightness_preset == "normal" %}selected{% endif %}>Normal</option>
+                        <option value="0.5" {% if brightness_preset == "night" %}selected{% endif %}>Night Mode</option>
+                        <option value="0.2" {% if brightness_preset == "low" %}selected{% endif %}>Low Light</option>
+                    </select>
                 </label>
                 <div class="separator"></div>
                 <h2>Modo</h2>
@@ -432,6 +438,14 @@ PAGE_TEMPLATE = """
             <form method="post">
                 <input type="hidden" name="action" value="restart">
                 <button class="danger" type="submit">Reset HoloDisplay</button>
+            </form>
+        </section>
+        <section class="card">
+            <form method="post">
+                <input type="hidden" name="action" value="toggle_holothot">
+                <button class="{% if holothot_active %}danger{% endif %}" type="submit">
+                    {% if holothot_active %}Apagar HoloThot{% else %}Iniciar HoloThot{% endif %}
+                </button>
             </form>
         </section>
         <section class="card">
@@ -827,6 +841,42 @@ def index() -> str:
             except subprocess.CalledProcessError as exc:
                 stderr = exc.stderr.strip() if exc.stderr else ""
                 error = f"Error reiniciando servicio: {stderr or exc}"
+        elif action == "toggle_holothot":
+            try:
+                active_check = subprocess.run(
+                    ["systemctl", "is-active", "--quiet", HOLOTHOT_SERVICE],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                is_active = active_check.returncode == 0
+                if not is_active:
+                    if not HOLOTHOT_PLAYLIST_PATH.exists():
+                        subprocess.run(
+                            ["sudo", "mount", "-a"],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        )
+                    if not HOLOTHOT_PLAYLIST_PATH.exists():
+                        raise ValueError(f"No está disponible {HOLOTHOT_PLAYLIST_PATH}. Revisa el mount (/etc/fstab) y la ruta remota.")
+                    subprocess.run(
+                        ["sudo", "systemctl", "stop", "holodisplay.service"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                operation = "stop" if is_active else "start"
+                subprocess.run(
+                    ["sudo", "systemctl", operation, HOLOTHOT_SERVICE],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                message = "HoloThot apagado" if is_active else "HoloThot iniciado"
+            except (subprocess.CalledProcessError, ValueError) as exc:
+                stderr = exc.stderr.strip() if exc.stderr else ""
+                error = f"Error controlando HoloThot: {stderr or exc}"
         elif action == "shutdown":
             try:
                 subprocess.run(
@@ -863,12 +913,31 @@ def index() -> str:
     smart_limit_value = search_section.get("smart_result_limit")
     if not isinstance(smart_limit_value, int) or smart_limit_value < 1:
         smart_limit_value = 100
+    holothot_check = subprocess.run(
+        ["systemctl", "is-active", "--quiet", HOLOTHOT_SERVICE],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    holothot_active = holothot_check.returncode == 0
+    brightness_value = float(display_section.get("brightness", 1.0)) if isinstance(display_section.get("brightness"), (int, float)) else 1.0
+    brightness_presets = {
+        "normal": 1.0,
+        "night": 0.5,
+        "low": 0.2,
+    }
+    brightness_preset = min(
+        brightness_presets.items(),
+        key=lambda item: abs(brightness_value - item[1]),
+    )[0]
     context = {
         "grayscale": bool(display_section.get("grayscale")),
         "show_year_overlay": bool(display_section.get("show_year_overlay")),
         "show_info_overlay": bool(display_section.get("show_info_overlay")),
         "seconds": int(display_section.get("seconds", 15)) if isinstance(display_section.get("seconds"), int) else 15,
-        "brightness": float(display_section.get("brightness", 1.0)) if isinstance(display_section.get("brightness"), (int, float)) else 1.0,
+        "brightness": brightness_value,
+        "brightness_preset": brightness_preset,
+        "holothot_active": holothot_active,
         "current_mode": current_mode,
         "modes": MODE_OPTIONS,
         "smart_query": search_section.get("smart_query") if isinstance(search_section.get("smart_query"), str) else "",

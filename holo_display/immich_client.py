@@ -336,6 +336,9 @@ class ImmichClient:
             width = exif_info.get("exifImageWidth") or exif_info.get("imageWidth")
             height = exif_info.get("exifImageHeight") or exif_info.get("imageHeight")
             if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+                orientation = exif_info.get("orientation")
+                if isinstance(orientation, int) and orientation in {5, 6, 7, 8}:
+                    return height, width
                 return width, height
         width = asset.get("width")
         height = asset.get("height")

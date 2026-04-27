@@ -4,7 +4,7 @@ import os
 import time
 from pathlib import Path
 from threading import Event
-from typing import Protocol
+from typing import Protocol, Callable
 
 
 class DisplayBackend(Protocol):
@@ -32,7 +32,9 @@ class PygameDisplay:
         pygame = self._init_pygame()
         target_width, target_height = self._screen.get_size()
         next_surface = pygame.image.load(str(path)).convert()
-        next_surface = pygame.transform.scale(next_surface, (target_width, target_height))
+        if next_surface.get_width() != target_width or next_surface.get_height() != target_height:
+            # `smoothscale` reduce aliasing/pixelado al escalar (mejor que `scale`).
+            next_surface = pygame.transform.smoothscale(next_surface, (target_width, target_height))
 
         transition_seconds = min(display_time, self.transition_ms / 1000)
         transition_elapsed = self._run_transition(next_surface, transition_seconds, stop_event)
@@ -42,6 +44,53 @@ class PygameDisplay:
         pygame.display.flip()
         self._current_surface = next_surface
         self._wait(hold_seconds, stop_event)
+
+    def show_splash_until(
+        self,
+        predicate: Callable[[], bool],
+        *,
+        text: str = "HoloDisplay loading...",
+        orientation: str = "landscape",
+        rotation_degrees: int = 0,
+        fps: int = 30,
+        cached_frames: int = 24,
+    ) -> None:
+        """
+        Muestra un splash animado hasta que `predicate()` sea True.
+
+        Usa el mismo `pygame`/screen que el display para evitar conflictos SDL.
+        """
+        pygame = self._init_pygame()
+        from .splash import SplashRenderer, SplashStyle
+
+        w, h = self._screen.get_size()
+
+        # Fuente simple: intentamos Roboto si está disponible por fontconfig
+        font = pygame.font.SysFont(["Roboto", "DejaVu Sans", "Arial", "Helvetica"], 54)
+
+        # Pi 3B: reducir trabajo por frame con menos frames cacheados.
+        effective_cached = max(12, min(int(cached_frames), 48))
+        if os.uname().machine.startswith(("arm", "aarch64")):
+            effective_cached = min(effective_cached, 24)
+
+        style = SplashStyle(text=text, cached_frames=effective_cached)
+        renderer = SplashRenderer(
+            pygame,
+            screen_size=(w, h),
+            orientation=orientation,
+            rotation_degrees=rotation_degrees,
+            font=font,
+            style=style,
+        )
+
+        while True:
+            self._pump_events()
+            if predicate():
+                return
+            self._screen.fill((0, 0, 0))
+            renderer.draw(self._screen)
+            pygame.display.flip()
+            self._clock.tick(max(1, fps))
 
     def _init_pygame(self):
         if self._pygame is not None:
@@ -77,7 +126,10 @@ class PygameDisplay:
             f"{detected_width}x{detected_height}",
         )
         print("SDL video driver:", self._selected_driver)
-        self._draw_startup_test_pattern()
+        # El patrón de prueba es útil para calibración, pero molesta en arranque normal.
+        # Se puede reactivar con HOLODISPLAY_STARTUP_PATTERN=1
+        if os.environ.get("HOLODISPLAY_STARTUP_PATTERN") == "1":
+            self._draw_startup_test_pattern()
         return pygame
 
     def _candidate_drivers(self) -> list[str]:
