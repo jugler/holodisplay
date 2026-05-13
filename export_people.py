@@ -7,12 +7,13 @@ import sys
 from pathlib import Path
 
 import requests
-import tomllib
+
+from holo_display.config import credentials_for_people_export
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Descarga los datos de /people de Immich y genera people.toml"
+        description="Descarga los datos de /people de Immich y genera un TOML (ruta por defecto = people_conf del usuario)",
     )
     parser.add_argument(
         "--config",
@@ -22,11 +23,18 @@ def parse_args() -> argparse.Namespace:
         help="Ruta al config.toml que contiene [immich]",
     )
     parser.add_argument(
+        "--user",
+        "-u",
+        choices=("main", "phone", "art", "nsfw"),
+        default="main",
+        help="Bloque [main|phone|art|nsfw] para api_key y people_conf (salida por defecto)",
+    )
+    parser.add_argument(
         "--output",
         "-o",
         type=Path,
-        default=Path("people.toml"),
-        help="Archivo TOML destino",
+        default=None,
+        help="Archivo TOML destino (por defecto: people_conf de ese usuario, resuelto como en la app)",
     )
     parser.add_argument(
         "--immich-url",
@@ -56,21 +64,6 @@ def parse_args() -> argparse.Namespace:
         help="Timeout en segundos para cada llamada HTTP",
     )
     return parser.parse_args()
-
-
-def load_immich_credentials(config_path: Path) -> tuple[str, str]:
-    raw_text = config_path.expanduser().read_text(encoding="utf-8")
-    raw = tomllib.loads(raw_text)
-    immich = raw.get("immich")
-    if not isinstance(immich, dict):
-        raise ValueError("Falta la sección [immich] en el archivo de configuración")
-    url = immich.get("url")
-    api_key = immich.get("api_key")
-    if not isinstance(url, str) or not url.rstrip():
-        raise ValueError("immich.url debe estar presente y ser una cadena no vacía")
-    if not isinstance(api_key, str) or not api_key.rstrip():
-        raise ValueError("immich.api_key debe estar presente y ser una cadena no vacía")
-    return url.rstrip("/"), api_key
 
 
 def fetch_people(
@@ -146,13 +139,18 @@ def write_people_toml(people_map: dict[str, str], output_path: Path) -> None:
     output_text = "\n".join(output_lines)
     if output_text:
         output_text += "\n"
-    output_path.expanduser().write_text(output_text, encoding="utf-8")
+    output_path = output_path.expanduser()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(output_text, encoding="utf-8")
 
 
 def main() -> None:
     args = parse_args()
     try:
-        base_url, api_key = load_immich_credentials(args.config)
+        base_url, api_key, default_output = credentials_for_people_export(
+            args.config,
+            args.user,
+        )
     except Exception as exc:
         print(f"Error al leer la configuración: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -161,6 +159,8 @@ def main() -> None:
         base_url = args.immich_url.rstrip("/")
     if args.api_key:
         api_key = args.api_key
+
+    output_path = args.output if args.output is not None else default_output
 
     try:
         people = fetch_people(
@@ -175,9 +175,9 @@ def main() -> None:
         sys.exit(1)
 
     people_map = build_people_map(people)
-    write_people_toml(people_map, args.output)
+    write_people_toml(people_map, output_path)
 
-    print(f"Escribí {len(people_map)} entradas en {args.output}")
+    print(f"Escribí {len(people_map)} entradas en {output_path}")
 
 
 if __name__ == "__main__":

@@ -4,19 +4,19 @@ set -e
 
 REMOTE_DIR="~/HoloDisplay"
 PROJECT_DIR="/Users/jugler/code/HoloDisplay"
-PEOPLE_PATH="$PROJECT_DIR/people.toml"
+PEOPLE_DIR="$PROJECT_DIR/people"
+
+if [[ ! -d "$PEOPLE_DIR" ]]; then
+  echo "No existe la carpeta people/ en $PEOPLE_DIR. Crea people/*.toml (p. ej. export_people.py -o people/main_people.toml)" >&2
+  exit 1
+fi
 
 typeset -A HOST_CONFIGS
 HOST_CONFIGS=(
   "pi@frame" "$PROJECT_DIR/config.frame.toml"
-  #"pi@holoframe" "$PROJECT_DIR/config.holoframe.toml"
-  "pi@holothot.local" "$PROJECT_DIR/config.holothot.toml"
+  "pi@holoframe" "$PROJECT_DIR/config.holoframe.toml"
+  #"pi@holothot.local" "$PROJECT_DIR/config.holothot.toml"
 )
-
-if [[ ! -f "$PEOPLE_PATH" ]]; then
-  echo "No existe people.toml en $PEOPLE_PATH. Genera uno con export_people.py" >&2
-  exit 1
-fi
 
 for REMOTE_HOST CONFIG_PATH in ${(kv)HOST_CONFIGS}; do
   if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -40,7 +40,9 @@ rsync -av \
   "$REMOTE_HOST:$REMOTE_DIR/"
   rsync -av \
     "$CONFIG_PATH" \
-    "$PEOPLE_PATH" \
+    "$REMOTE_HOST:$REMOTE_DIR/"
+  rsync -av \
+    "$PROJECT_DIR/people" \
     "$REMOTE_HOST:$REMOTE_DIR/"
   ssh "$REMOTE_HOST" "mv $REMOTE_DIR/$(basename "$CONFIG_PATH") $REMOTE_DIR/config.toml"
 done

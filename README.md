@@ -64,40 +64,51 @@ Ejemplo de `config.toml`:
 ```toml
 [immich]
 url = "http://192.168.2.10:2283/api"
+active_user = "main"
+
+[main]
 api_key = "TU_API_KEY"
+people_conf = "main_people.toml"
+
+[phone]
+api_key = "TU_API_KEY_PHONE"
+people_conf = "phone_people.toml"
+
+[art]
+api_key = "TU_API_KEY_ART"
+people_conf = "art_people.toml"
+
+[nsfw]
+api_key = "TU_API_KEY_NSFW"
+people_conf = "nsfw_people.toml"
 
 [display]
 pics_dir = "/home/pi/HoloDisplay/pics"
 screen_width = 1920
 screen_height = 1080
 seconds = 15
-show_person_overlay = true
-# overlay_layout:
-# split = nombres arriba izquierda + ano abajo derecha
-# mirrored = nombres arriba derecha + ano abajo izquierda
-# right = alias legacy de mirrored
 overlay_layout = "split"
 transition_ms = 700
 
 [search]
-# modes soportados: person, smart, memories, random
 mode = "random"
-# si mode = "smart", descomenta y ajusta esta linea:
-# smart_query = "beach"
 default_people = ["Jesus"]
 search_size = 1000
 seen_buffer_size = 100
-
-[persons]
-Jesus = "PERSON_ID_DE_IMMICH"
 ```
+
+Los mapas `nombre = personId` van en archivos bajo la carpeta `people/` (p. ej. `people/main_people.toml`).
 
 ### Campos importantes
 
 `[immich]`
 
 - `url`: URL base del API de Immich. Normalmente termina en `/api`
-- `api_key`: API key del usuario
+- `active_user`: `main`, `phone`, `art` o `nsfw`. Define la biblioteca/API key/people_conf en uso. Se puede sobreescribir con `--user`.
+
+`[main]`, `[phone]`, `[art]`, `[nsfw]`
+
+- `api_key` y `people_conf` por biblioteca; ver arriba y `config.example.toml`. Cuando `active_user` es `art` o `nsfw` se usan la key y el TOML de esa sección y los overlays de personas se apagan.
 
 `[display]`
 
@@ -122,10 +133,10 @@ Jesus = "PERSON_ID_DE_IMMICH"
 
 Personas
 
-- Las personas ya no viven en `[persons]` del `config.toml`. Ahora se leen desde un archivo `people.toml` ubicado junto al config que uses (por ejemplo `config.toml` → `people.toml`, `config.holothot.toml` → `people.toml`).
-- Genera ese archivo con `python3 export_people.py` o mantenlo a mano. Contiene pares `"Nombre" = "personId"`.
-- `default_people` en `[search]` debe referenciar nombres existentes en ese `people.toml` o fallará al arrancar.
-- Puedes definir grupos en `[aliases]` dentro de `people.toml`, por ejemplo:
+- Las personas se cargan desde archivos TOML en la carpeta **`people/`** junto al `config.toml` que uses. En `[main]`, `[phone]`, `[art]` y `[nsfw]` el campo **`people_conf`** es el nombre del archivo (p. ej. `main_people.toml` → `people/main_people.toml`). Una ruta que empiece por `people/` se interpreta relativa al directorio del config.
+- Genera o actualiza esos archivos con `python3 export_people.py` (por defecto escribe `people/main_people.toml`) o editálos a mano. Contienen pares `"Nombre" = "personId"`.
+- `default_people` en `[search]` debe referenciar nombres existentes en el TOML que corresponda al modo activo o fallará al arrancar.
+- Puedes definir grupos en `[aliases]` dentro de ese TOML, por ejemplo:
 
 ```toml
 [aliases]
@@ -134,10 +145,6 @@ Familia = ["Jesus", "Vero"]
 ```
 
 Los aliases sirven tanto en `default_people` como en `--person`.
-
-`[art]`
-
-- `api_key`: API key del usuario art; se usa cuando `search.mode = "art"` o `--art`. En ese modo los overlays se apagan automáticamente.
 
 ## Exportar personas
 
@@ -148,7 +155,7 @@ Con un `config.toml` válido basta ejecutar:
 python3 export_people.py
 ```
 
-Eso consulta `GET /people`, incluyendo toda la paginación, y genera `people.toml` con líneas como:
+Eso consulta `GET /people`, incluyendo toda la paginación, y por defecto escribe `people/main_people.toml` con líneas como:
 
 ```toml
 "Jesus" = "4b2d2c50..."
@@ -158,11 +165,11 @@ Eso consulta `GET /people`, incluyendo toda la paginación, y genera `people.tom
 Opciones relevantes:
 
 1. `--config` / `-c` apunta a otro archivo de configuración antes de llamar a la API.
-2. `--output` / `-o` cambia la ruta del `people.toml`.
+2. `--output` / `-o` cambia la ruta del archivo (por defecto `people/main_people.toml`).
 3. `--include-hidden` incluye personas ocultas (`withHidden=true`).
 4. `--immich-url` / `--api-key` permiten usar credenciales distintas.
 
-Usa ese `people.toml` para copiar los pares `nombre = id` dentro de `[persons]` o para tus scripts.
+Usa ese TOML como referencia para tus scripts o copia pares `nombre = id` entre archivos en `people/`.
 
 ## Como correrlo
 
@@ -182,7 +189,7 @@ python3 HoloDisplay.py --config /ruta/a/config.toml
 
 ### `person`
 
-Muestra fotos de una o varias personas configuradas en `[search].default_people` (los IDs vienen de `people.toml`).
+Muestra fotos de una o varias personas configuradas en `[search].default_people` (los IDs vienen del TOML de personas activo, p. ej. `people/main_people.toml`).
 
 Por config:
 
@@ -198,7 +205,7 @@ Por CLI:
 python3 HoloDisplay.py --person Jesus --person Vero
 ```
 
-Puedes usar aliases definidos en `people.toml` (se aceptan en `default_people` y en `--person`). Si pasas varias personas o aliases, se combinan con OR: basta que cualquier persona aparezca en la foto.
+Puedes usar aliases definidos en el TOML de personas (se aceptan en `default_people` y en `--person`). Si pasas varias personas o aliases, se combinan con OR: basta que cualquier persona aparezca en la foto.
 
 Si Immich devuelve `birthDate` en cada persona del asset, el overlay muestra la edad calculada al momento de la foto: `Vero (34)` y, si es menor a 1 año, en meses: `Bebé (11 meses)`.
 
@@ -207,6 +214,7 @@ Si agregas varias personas, el cliente consulta Immich una vez por cada `personI
 ### `smart`
 
 Hace smart search textual en Immich.
+Immich devuelve los resultados ordenados por relevancia al query, y el proyecto preserva ese orden (no hace random/shuffle en este modo).
 
 Por config:
 
@@ -261,24 +269,24 @@ Por CLI:
 python3 HoloDisplay.py --random
 ```
 
-### `art`
+### Bibliotecas `art` y `nsfw`
 
-Usa el nuevo usuario “art” con su propia API key en el mismo servidor. El modo se comporta como un `random` específico para ese usuario.
+Las bibliotecas `art` y `nsfw` ya no son modos: son valores de `immich.active_user`. Cuando una de ellas está activa se usa la `api_key` y `people_conf` de esa sección y los overlays de personas se desactivan automáticamente.
 
 Por config:
 
 ```toml
-[search]
-mode = "art"
+[immich]
+active_user = "art"
 ```
 
 Por CLI:
 
 ```bash
-python3 HoloDisplay.py --art
+python3 HoloDisplay.py --user art
 ```
 
-En modo `art` los overlays se desactivan automáticamente aunque estén habilitados en la configuración, de modo que las imágenes se muestran sin texto adicional.
+Una vez seleccionada la biblioteca puedes combinarla con cualquier `search.mode` válido (`person`, `smart`, `memories`, `random`).
 
 ## Overlays
 
@@ -346,7 +354,7 @@ El destino por defecto esta definido en [`deploy.sh`](/Users/jugler/code/HoloDis
 
 ## Interfaz web de configuración
 
-`HoloConfigServer.py` expone una página responsiva en `http://<tu-pi>:8080` que permite ajustar `config.toml`, cambiar el modo, seleccionar aliases/personas de `people.toml` y forzar la siguiente foto con `[immediate_actions].next`. Es ideal para acceder desde un celular antes de convertirlo en un shortcut/app.
+`HoloConfigServer.py` expone una página responsiva en `http://<tu-pi>:8080` que permite ajustar `config.toml`, cambiar el modo, seleccionar aliases/personas según los TOML en `people/` y forzar la siguiente foto con `[immediate_actions].next`. Es ideal para acceder desde un celular antes de convertirlo en un shortcut/app.
 
 Para ejecutarlo basta con:
 

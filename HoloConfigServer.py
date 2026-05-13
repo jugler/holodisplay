@@ -9,16 +9,40 @@ import subprocess
 import tomllib
 import json
 import requests
-from flask import Flask, request, render_template_string, send_from_directory, abort
+from flask import Flask, abort, jsonify, render_template_string, request, send_from_directory
+
+from holo_display.config import effective_api_key, load_file_config
 
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.toml"
-PEOPLE_PATH = BASE_DIR / "people.toml"
 ASSETS_DIR = BASE_DIR / "assets"
 HOLOTHOT_SERVICE = "holothot.service"
 HOLOTHOT_PLAYLIST_PATH = Path("/mnt/holothot/processed/playlist.mp4")
+HOLODISPLAY_SERVICE = "holodisplay.service"
+DISPLAY_LOG_LINES = 15
+
+
+def _journal_tail(unit: str, lines: int) -> str:
+    try:
+        proc = subprocess.run(
+            ["journalctl", "-u", unit, "-n", str(lines), "--no-pager"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return "journalctl excedió el tiempo de espera (5s)."
+    except OSError as exc:
+        return f"No se pudo ejecutar journalctl: {exc}"
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip() or "journalctl falló"
+        if len(err) > 500:
+            err = err[:500] + "…"
+        return f"No se pudieron leer los logs: {err}"
+    out = (proc.stdout or "").rstrip()
+    return out if out else "(Sin entradas recientes en el journal.)"
 
 
 @app.route("/assets/<path:filename>")
@@ -74,7 +98,7 @@ def _append_text(original: str | None, addition: str | None) -> str | None:
 def _process_favorite_action(
     immediate_section: dict[str, object],
     display_section: dict[str, object],
-    immich_section: dict[str, object],
+    search_section: dict[str, object],
 ) -> tuple[str | None, str | None]:
     raw_value = immediate_section.get("favorite", 0)
     if isinstance(raw_value, bool):
@@ -91,12 +115,19 @@ def _process_favorite_action(
     if not asset_id:
         return None, "No hay asset actual para marcar favorito"
 
-    immich_url = immich_section.get("url")
-    api_key = immich_section.get("api_key")
+    try:
+        fc = load_file_config(CONFIG_PATH, argv=[])
+    except ValueError as exc:
+        return None, f"Config Immich invalida: {exc}"
+
+    immich_url = fc.immich_url
+    try:
+        api_key = effective_api_key(fc, active_user=fc.active_user)
+    except ValueError as exc:
+        return None, str(exc)
+
     if not isinstance(immich_url, str) or not immich_url.strip():
         return None, "No se ha configurado la URL de Immich"
-    if not isinstance(api_key, str) or not api_key.strip():
-        return None, "No se ha configurado la API key de Immich"
 
     try:
         response = requests.put(
@@ -137,13 +168,33 @@ def current_frame_meta() -> str:
     return json.dumps({"isFavorite": is_favorite})
 
 
+@app.route("/display-logs", methods=["GET"])
+def display_logs_json():
+    return jsonify(text=_journal_tail(HOLODISPLAY_SERVICE, DISPLAY_LOG_LINES))
+
+
+@app.route("/people/<library>", methods=["GET"])
+def people_for_library(library: str):
+    """Devuelve persons/aliases para la biblioteca indicada, para refrescar el UI sin recargar."""
+    if library not in ACTIVE_USER_OPTIONS:
+        abort(404)
+    try:
+        fc = load_file_config(CONFIG_PATH, argv=[], resolve_people_context=library)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    aliases_payload = {name: list(members) for name, members in fc.aliases.items()}
+    persons_payload = sorted(fc.persons.keys())
+    return jsonify(aliases=aliases_payload, persons=persons_payload)
+
+
 MODE_OPTIONS: list[tuple[str, str]] = [
     ("person", "Personas"),
     ("smart", "Smart"),
     ("memories", "Memories"),
     ("random", "Random"),
-    ("art", "Art"),
 ]
+
+ACTIVE_USER_OPTIONS: tuple[str, ...] = ("main", "phone", "art", "nsfw")
 
 
 PAGE_TEMPLATE = """
@@ -319,6 +370,21 @@ PAGE_TEMPLATE = """
         .conditional.hidden {
             display: none;
         }
+        .log-preview {
+            margin: 0;
+            padding: 0.75rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.8rem;
+            line-height: 1.35;
+            background: rgba(2, 6, 23, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 0.65rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 22rem;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -386,6 +452,16 @@ PAGE_TEMPLATE = """
                     </select>
                 </label>
                 <div class="separator"></div>
+                <h2>Immich</h2>
+                <label>
+                    <span>Biblioteca (active_user)</span>
+                    <select name="active_user" id="active-user-select" data-current="{{ active_user }}">
+                        {% for option in active_user_options %}
+                        <option value="{{ option }}" {% if option == active_user %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <div class="separator"></div>
                 <h2>Modo</h2>
                 <label>
                     <span>Actual</span>
@@ -417,7 +493,7 @@ PAGE_TEMPLATE = """
                     <label>
                         <span>Personas (coma separada)</span>
                         <input type="text" name="default_people" id="default-people" value="{{ default_people | join(', ') }}" placeholder="Jesus, Vero">
-                        <span class="note">Ej: {{ sample_people }}</span>
+                        <span class="note" id="default-people-sample">Ej: {{ sample_people }}</span>
                     </label>
                 </div>
                 <label>
@@ -454,6 +530,10 @@ PAGE_TEMPLATE = """
                 <button class="danger" type="submit">Apagar pi</button>
             </form>
         </section>
+        <section class="card">
+            <h2 style="margin: 0 0 0.65rem; font-size: 1.1rem;">Logs HoloDisplay</h2>
+            <pre id="display-log-lines" class="log-preview">{{ display_logs }}</pre>
+        </section>
     </main>
     <script>
         const modeSelect = document.getElementById('mode-select');
@@ -482,6 +562,48 @@ PAGE_TEMPLATE = """
             if (members) {
                 defaultPeopleInput.value = members;
             }
+        });
+
+        const activeUserSelect = document.getElementById('active-user-select');
+        const refreshAliasOptions = (library) => {
+            if (!aliasSelect) {
+                return;
+            }
+            fetch(`/people/${encodeURIComponent(library)}`)
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error('No se pudieron cargar los alias');
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    const aliases = data.aliases || {};
+                    const persons = data.persons || [];
+                    const previousValue = aliasSelect.value;
+                    aliasSelect.innerHTML = '';
+                    const keepOpt = document.createElement('option');
+                    keepOpt.value = '';
+                    keepOpt.textContent = '«Mantener lista actual»';
+                    aliasSelect.appendChild(keepOpt);
+                    Object.keys(aliases).sort().forEach((alias) => {
+                        const opt = document.createElement('option');
+                        opt.value = alias;
+                        opt.dataset.members = (aliases[alias] || []).join(', ');
+                        opt.textContent = alias;
+                        aliasSelect.appendChild(opt);
+                    });
+                    if (previousValue && aliases[previousValue]) {
+                        aliasSelect.value = previousValue;
+                    }
+                    const note = document.getElementById('default-people-sample');
+                    if (note && persons.length > 0) {
+                        note.textContent = `Ej: ${persons.slice(0, 3).join(', ')}`;
+                    }
+                })
+                .catch(() => {});
+        };
+        activeUserSelect?.addEventListener('change', () => {
+            refreshAliasOptions(activeUserSelect.value);
         });
 
         document.addEventListener('DOMContentLoaded', updateSections);
@@ -521,6 +643,20 @@ PAGE_TEMPLATE = """
             }, 5000);
             framePreview.addEventListener('error', () => clearInterval(intervalId));
             refreshMeta();
+        }
+        const logPre = document.getElementById('display-log-lines');
+        const refreshDisplayLogs = () => {
+            fetch('/display-logs')
+                .then((response) => response.json())
+                .then((data) => {
+                    if (logPre && typeof data.text === 'string') {
+                        logPre.textContent = data.text;
+                    }
+                })
+                .catch(() => {});
+        };
+        if (logPre) {
+            setInterval(refreshDisplayLogs, 5000);
         }
     </script>
 </body>
@@ -565,32 +701,6 @@ def _read_config_sections() -> tuple[dict[str, object], dict[str, object], dict[
         immich_section = {}
     mtime = CONFIG_PATH.stat().st_mtime
     return display, search, immediate, mtime, instance_label, immich_section
-
-
-def _load_people() -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
-    raw = _load_toml(PEOPLE_PATH)
-    if not isinstance(raw, dict):
-        raise ValueError("people.toml debe contener un mapa simple")
-    aliases_raw = raw.get("aliases")
-    people = {}
-    for name, person_id in raw.items():
-        if name == "aliases":
-            continue
-        person_name = _ensure_str(name, "nombre de persona")
-        person_value = _ensure_str(person_id, f"persona {person_name}")
-        people[person_name] = person_value
-    if not people:
-        raise ValueError("people.toml está vacío")
-    aliases = {}
-    if aliases_raw is not None:
-        if not isinstance(aliases_raw, dict):
-            raise ValueError("aliases debe ser un objeto")
-        for alias, members in aliases_raw.items():
-            alias_name = _ensure_str(alias, "alias")
-            if not isinstance(members, list | tuple):
-                raise ValueError(f"aliases.{alias_name} debe ser una lista")
-            aliases[alias_name] = tuple(_ensure_str(member, f"aliases.{alias_name}[]") for member in members)
-    return people, aliases
 
 
 def _expand_people(names: Iterable[str], people: Mapping[str, str], aliases: Mapping[str, tuple[str, ...]]) -> tuple[str, ...]:
@@ -730,15 +840,19 @@ def index() -> str:
         immich_section = {}
         error = str(exc)
     try:
-        people_map, alias_map = _load_people()
+        fc_people = load_file_config(CONFIG_PATH, argv=[])
+        people_map, alias_map = fc_people.persons, fc_people.aliases
+        active_user = fc_people.active_user
     except ValueError as exc:
         people_map = {}
         alias_map = {}
         people_error = str(exc)
-    current_mode = search_section.get("mode") if isinstance(search_section.get("mode"), str) else "random"
+        au_raw = immich_section.get("active_user")
+        active_user = au_raw.strip() if isinstance(au_raw, str) and au_raw.strip() else "main"
     default_people_list = search_section.get("default_people")
     if not isinstance(default_people_list, list):
         default_people_list = []
+    current_mode = search_section.get("mode") if isinstance(search_section.get("mode"), str) else "random"
     if request.method == "POST":
         action = request.form.get("action")
         if action == "config":
@@ -775,8 +889,25 @@ def index() -> str:
                         smart_limit_value = int(smart_limit_raw)
                     except ValueError as exc:
                         raise ValueError("Smart limit debe ser un número entero") from exc
-                    if smart_limit_value < 1:
-                        raise ValueError("Smart limit debe ser al menos 1")
+                if smart_limit_value < 1:
+                    raise ValueError("Smart limit debe ser al menos 1")
+                active_user_form = (request.form.get("active_user") or "main").strip()
+                if active_user_form not in ACTIVE_USER_OPTIONS:
+                    raise ValueError("Biblioteca Immich debe ser main, phone, art o nsfw")
+                resolved: tuple[str, ...] | None = None
+                if mode == "person":
+                    try:
+                        fc_validate = load_file_config(
+                            CONFIG_PATH,
+                            argv=[],
+                            resolve_people_context=active_user_form,
+                        )
+                    except ValueError as exc:
+                        raise ValueError(f"No se pudo validar personas: {exc}") from exc
+                    default_people_raw = request.form.get("default_people", "")
+                    resolved = _parse_people_field(
+                        default_people_raw, fc_validate.persons, fc_validate.aliases
+                    )
                 updates.extend([
                     ("display", "grayscale", _format_toml_value(grayscale)),
                     ("display", "seconds", _format_toml_value(seconds)),
@@ -784,6 +915,7 @@ def index() -> str:
                     ("display", "show_year_overlay", _format_toml_value(show_year)),
                     ("display", "show_info_overlay", _format_toml_value(show_info)),
                 ])
+                updates.append(("immich", "active_user", _format_toml_string(active_user_form)))
                 updates.append(("search", "mode", _format_toml_string(mode)))
                 if mode == "smart":
                     smart_query = (request.form.get("smart_query") or "").strip()
@@ -791,11 +923,17 @@ def index() -> str:
                         raise ValueError("Es necesario indicar una smart query")
                     updates.append(("search", "smart_query", _format_toml_string(smart_query)))
                 updates.append(("search", "smart_result_limit", _format_toml_value(smart_limit_value)))
-                default_people_raw = request.form.get("default_people", "")
-                resolved = _parse_people_field(default_people_raw, people_map, alias_map)
-                updates.append(("search", "default_people", _format_toml_value(resolved)))
+                if resolved is not None:
+                    updates.append(("search", "default_people", _format_toml_value(resolved)))
                 _apply_updates(updates)
                 message = "Configuración guardada"
+                try:
+                    fc_people = load_file_config(CONFIG_PATH, argv=[])
+                    people_map, alias_map = fc_people.persons, fc_people.aliases
+                    active_user = fc_people.active_user
+                    people_error = None
+                except ValueError as reload_exc:
+                    people_error = str(reload_exc)
                 display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
                 default_people_list = search_section.get("default_people")
                 if not isinstance(default_people_list, list):
@@ -832,7 +970,7 @@ def index() -> str:
         elif action == "restart":
             try:
                 subprocess.run(
-                    ["sudo", "systemctl", "restart", "holodisplay.service"],
+                    ["sudo", "systemctl", "restart", HOLODISPLAY_SERVICE],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -860,8 +998,8 @@ def index() -> str:
                         )
                     if not HOLOTHOT_PLAYLIST_PATH.exists():
                         raise ValueError(f"No está disponible {HOLOTHOT_PLAYLIST_PATH}. Revisa el mount (/etc/fstab) y la ruta remota.")
-                    subprocess.run(
-                        ["sudo", "systemctl", "stop", "holodisplay.service"],
+                        subprocess.run(
+                            ["sudo", "systemctl", "stop", HOLODISPLAY_SERVICE],
                         check=True,
                         capture_output=True,
                         text=True,
@@ -895,7 +1033,7 @@ def index() -> str:
     favorite_note, favorite_err = _process_favorite_action(
         immediate_section,
         display_section,
-        immich_section,
+        search_section,
     )
     if favorite_note:
         display_section, search_section, immediate_section, mtime, instance_name, immich_section = _read_config_sections()
@@ -956,6 +1094,9 @@ def index() -> str:
         "is_favorite": is_favorite,
         "smart_limit": smart_limit_value,
         "instance_name": instance_name,
+        "active_user": active_user,
+        "active_user_options": ACTIVE_USER_OPTIONS,
+        "display_logs": _journal_tail(HOLODISPLAY_SERVICE, DISPLAY_LOG_LINES),
     }
     return render_template_string(PAGE_TEMPLATE, **context)
 

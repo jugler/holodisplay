@@ -11,6 +11,32 @@ def _split_info_lines(value: str) -> list[str]:
     return [line for line in lines if line]
 
 
+def logical_point_to_frame_after_rotation(
+    lx: int,
+    ly: int,
+    logical_width: int,
+    logical_height: int,
+    orientation: str,
+    rotation_degrees: int,
+) -> tuple[int, int]:
+    """
+    Misma numeracion que year_overlay_* (canvas logico antes de rotar).
+
+    Convierte (lx, ly) a coordenadas en el JPEG guardado despues de
+    image.rotate(rotation_degrees, expand=True) (antihorario, como Pillow).
+    Sin rotacion en el pipeline, devuelve (lx, ly) sin cambio.
+    """
+    rd = rotation_degrees % 360
+    if orientation != "portrait" or rd == 0:
+        return lx, ly
+    x, y = float(lx), float(ly)
+    w, h = logical_width, logical_height
+    for _ in range(rd // 90):
+        x, y = y, w - 1 - x
+        w, h = h, w
+    return int(round(x)), int(round(y))
+
+
 class ImageProcessor:
     def __init__(
         self,

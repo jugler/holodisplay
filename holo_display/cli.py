@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import (
     AppConfig,
+    BROWSE_USER_CHOICES,
     DEFAULT_CONFIG_PATH,
     DEFAULT_DISPLAY_TIME,
     DEFAULT_TRANSITION_MS,
@@ -13,6 +14,7 @@ from .config import (
     ORIENTATION_CHOICES,
     ROTATION_DEGREES_CHOICES,
     DEFAULT_ROTATION_DEGREES,
+    effective_api_key,
     load_file_config,
     _expand_people,
 )
@@ -21,38 +23,36 @@ from .config import (
 def build_config(argv: list[str] | None = None) -> AppConfig:
     args = list(sys.argv[1:] if argv is None else argv)
     config_path = _extract_config_path(args)
-    file_config = load_file_config(config_path)
+    file_config = load_file_config(config_path, argv=args)
     parser = _build_parser(file_config)
     namespace = parser.parse_args(args)
 
+    effective_user = (
+        namespace.browse_user.strip()
+        if isinstance(namespace.browse_user, str) and namespace.browse_user.strip()
+        else file_config.active_user
+    )
+    if effective_user not in BROWSE_USER_CHOICES:
+        raise ValueError(
+            f"active_user (--user) debe ser uno de: {', '.join(sorted(BROWSE_USER_CHOICES))}"
+        )
+
     search_mode = file_config.search_mode
-    active_people = _expand_people(file_config.default_people, file_config.persons, file_config.aliases)
-    active_person = active_people[0]
-    person_ids = tuple(file_config.persons[name] for name in active_people)
-    person_id = person_ids[0]
+    if search_mode == "person":
+        active_people = _expand_people(
+            file_config.default_people, file_config.persons, file_config.aliases
+        )
+        active_person = active_people[0]
+        person_ids = tuple(file_config.persons[name] for name in active_people)
+        person_id = person_ids[0]
+    else:
+        active_people = ()
+        active_person = None
+        person_ids = ()
+        person_id = None
     smart_query = file_config.smart_query
     orientation = namespace.orientation or file_config.orientation
     rotation_degrees = namespace.rotation if namespace.rotation is not None else file_config.rotation_degrees
-    art_flag = namespace.art or file_config.default_art_mode
-
-    if search_mode == "smart":
-        search_mode = "smart"
-        active_person = None
-        active_people = ()
-        person_id = None
-        person_ids = ()
-    elif search_mode == "memories":
-        search_mode = "memories"
-        active_person = None
-        active_people = ()
-        person_id = None
-        person_ids = ()
-    elif search_mode == "random":
-        search_mode = "random"
-        active_person = None
-        active_people = ()
-        person_id = None
-        person_ids = ()
 
     if namespace.person is not None:
         search_mode = "person"
@@ -83,11 +83,10 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         person_ids = ()
         smart_query = None
 
-    api_key_value = file_config.api_key
-    if art_flag:
-        if not file_config.art_api_key:
-            raise ValueError("art mode requiere definir art.api_key en el archivo de configuracion")
-        api_key_value = file_config.art_api_key
+    api_key_value = effective_api_key(
+        file_config,
+        active_user=effective_user,
+    )
 
     return AppConfig(
         immich_url=file_config.immich_url,
@@ -104,6 +103,14 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         year_overlay_y=file_config.year_overlay_y,
         info_overlay_x=file_config.info_overlay_x,
         info_overlay_y=file_config.info_overlay_y,
+        show_clock_overlay=file_config.show_clock_overlay,
+        clock_overlay_position=file_config.clock_overlay_position,
+        clock_overlay_font_size=file_config.clock_overlay_font_size,
+        clock_overlay_margin=file_config.clock_overlay_margin,
+        clock_overlay_space=file_config.clock_overlay_space,
+        clock_overlay_show_background=file_config.clock_overlay_show_background,
+        clock_overlay_x=file_config.clock_overlay_x,
+        clock_overlay_y=file_config.clock_overlay_y,
         pics_dir=file_config.pics_dir,
         screen_width=file_config.screen_width,
         screen_height=file_config.screen_height,
@@ -120,7 +127,8 @@ def build_config(argv: list[str] | None = None) -> AppConfig:
         search_size=file_config.search_size,
         seen_buffer_size=file_config.seen_buffer_size,
         smart_result_limit=file_config.smart_result_limit,
-        use_art_api_key=art_flag,
+        active_user=effective_user,
+        people_source_path=file_config.people_source_path,
         immediate_next=file_config.immediate_next,
         config_path=Path(config_path).expanduser(),
     )
@@ -142,6 +150,14 @@ def _build_parser(file_config: FileConfig) -> argparse.ArgumentParser:
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Ruta al archivo TOML de configuracion.",
+    )
+    parser.add_argument(
+        "--user",
+        "--active-user",
+        dest="browse_user",
+        default=None,
+        metavar="main|phone|art|nsfw",
+        help="Biblioteca activa (immich.active_user): main, phone, art o nsfw. Por defecto el valor en config.",
     )
 
     search_group = parser.add_mutually_exclusive_group()
@@ -192,11 +208,6 @@ def _build_parser(file_config: FileConfig) -> argparse.ArgumentParser:
         type=int,
         choices=sorted(ROTATION_DEGREES_CHOICES),
         help="Rotar el render final (0, 90, 180, 270); se aplica cuando orientation=portrait.",
-    )
-    parser.add_argument(
-        "--art",
-        action="store_true",
-        help="Usa la API key del usuario art (requiere `[art].api_key`).",
     )
 
     return parser

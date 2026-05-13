@@ -83,15 +83,18 @@ class ImmichClient:
                 )
                 break
 
-        if self.config.search_mode != "memories":
+        # En smart, Immich devuelve resultados ordenados por relevancia.
+        # No barajamos para no romper ese orden.
+        if self.config.search_mode not in {"memories", "smart"}:
             self._shuffle_assets(results)
         print("Assets cargados:", len(results))
         return results
 
     def fetch_thumbnail(self, asset_id: str) -> bytes:
         response = requests.get(
-            f"{self.config.immich_url}/assets/{asset_id}/original",
+            f"{self.config.immich_url}/assets/{asset_id}/thumbnail",
             headers=self.config.headers,
+            params={"size": "preview"},
             timeout=30,
         )
         response.raise_for_status()

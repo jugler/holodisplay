@@ -19,7 +19,7 @@ COUNTRY_ALIASES = {
     "United Kingdom": "UK",
 }
 from .display import DisplayBackend
-from .image_processing import ImageProcessor
+from .image_processing import ImageProcessor, logical_point_to_frame_after_rotation
 from .immich_client import ImmichClient
 
 
@@ -130,10 +130,38 @@ class SlideshowApp:
                     stop_event = Event()
                     watcher = self._start_config_watcher(stop_event)
 
+                    clock_space = self.config.clock_overlay_space
+                    clock_x = self.config.clock_overlay_x
+                    clock_y = self.config.clock_overlay_y
+                    if (
+                        clock_space == "logical"
+                        and clock_x is not None
+                        and clock_y is not None
+                    ):
+                        clock_x, clock_y = logical_point_to_frame_after_rotation(
+                            clock_x,
+                            clock_y,
+                            self.config.logical_width,
+                            self.config.logical_height,
+                            self.config.orientation,
+                            self.config.rotation_degrees,
+                        )
+                        clock_space = "frame"
+
                     current_display.show_image(
                         self.config.image_path,
                         current_display_time,
                         stop_event=stop_event,
+                        show_clock_overlay=self.config.show_clock_overlay,
+                        clock_overlay_position=self.config.clock_overlay_position,
+                        clock_overlay_font_size=self.config.clock_overlay_font_size,
+                        clock_overlay_margin=self.config.clock_overlay_margin,
+                        clock_overlay_space=clock_space,
+                        clock_overlay_show_background=self.config.clock_overlay_show_background,
+                        clock_overlay_x=clock_x,
+                        clock_overlay_y=clock_y,
+                        display_orientation=self.config.orientation,
+                        display_rotation_degrees=self.config.rotation_degrees,
                     )
                     first_frame = False
 
@@ -244,7 +272,7 @@ class SlideshowApp:
                 )
             elif (
                 self.config.search_mode in {"person", "random"}
-                and not self.config.use_art_api_key
+                and self.config.active_user not in {"art", "nsfw"}
                 and (self.config.show_year_overlay or self.config.show_info_overlay)
             ):
                 image = self.processor.add_person_overlay(
@@ -467,7 +495,8 @@ class SlideshowApp:
             search_changed
             or previous_config.api_key != new_config.api_key
             or previous_config.immich_url != new_config.immich_url
-            or previous_config.use_art_api_key != new_config.use_art_api_key
+            or previous_config.active_user != new_config.active_user
+            or previous_config.people_source_path != new_config.people_source_path
         )
 
         if client_changed:
@@ -523,6 +552,9 @@ class SlideshowApp:
             or previous_config.smart_query != new_config.smart_query
             or previous_config.smart_city != new_config.smart_city
             or previous_config.search_size != new_config.search_size
+            or previous_config.api_key != new_config.api_key
+            or previous_config.active_user != new_config.active_user
+            or previous_config.people_source_path != new_config.people_source_path
         )
 
     def _print_config_summary(self) -> None:
@@ -563,8 +595,23 @@ class SlideshowApp:
             parts.append("año")
         if self.config.show_info_overlay:
             parts.append("info")
-        overlays = ", ".join(parts) if parts else "ninguno"
-        return f"{overlays} (layout={self.config.overlay_layout})"
+        photo = ", ".join(parts) if parts else "ninguno"
+        base = f"foto: {photo} (layout={self.config.overlay_layout})"
+        if self.config.show_clock_overlay:
+            if self.config.clock_overlay_x is not None and self.config.clock_overlay_y is not None:
+                clock = (
+                    f"si, espacio={self.config.clock_overlay_space}, "
+                    f"x={self.config.clock_overlay_x} y={self.config.clock_overlay_y}, "
+                    f"fuente={self.config.clock_overlay_font_size}px"
+                )
+            else:
+                clock = (
+                    f"si, ancla={self.config.clock_overlay_position}, "
+                    f"margen={self.config.clock_overlay_margin}px, fuente={self.config.clock_overlay_font_size}px"
+                )
+        else:
+            clock = "no"
+        return f"{base}; reloj en pantalla: {clock}"
 
     def _reset_immediate_next(self) -> None:
         """Reset [immediate_actions].next to 0 in the current config file."""

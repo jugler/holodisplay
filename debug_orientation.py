@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from holo_display.config import load_file_config
+from holo_display.config import effective_api_key, load_file_config
 from holo_display.immich_client import ImmichClient
 
 
@@ -58,11 +58,15 @@ def _jsonify_exif_value(value: object) -> object:
 def main() -> int:
     args = _parse_args()
     file_config = load_file_config(args.config) if args.config else load_file_config()
+    browse_key = effective_api_key(
+        file_config,
+        active_user=file_config.active_user,
+    )
 
     # ImmichClient usa AppConfig, pero aquí solo necesitamos URL + headers.
     class _MiniConfig:
         immich_url = file_config.immich_url
-        headers = {"x-api-key": file_config.api_key}
+        headers = {"x-api-key": browse_key}
         search_mode = "person"
         orientation = "any"
         search_size = 1
@@ -70,7 +74,6 @@ def main() -> int:
         person_ids: tuple[str, ...] = ()
         smart_query = None
         smart_city = None
-        use_art_api_key = False
 
     client = ImmichClient(_MiniConfig())  # type: ignore[arg-type]
     asset_id: str = args.asset_id

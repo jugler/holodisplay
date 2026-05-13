@@ -1,6 +1,25 @@
 [immich]
 url = "http://immich.local:2283/api"
+# active_user define la biblioteca/api_key activa: main, phone, art o nsfw.
+active_user = "main"
+# Los TOML de personas viven en la carpeta people/ junto al config (people_conf es solo el nombre de archivo).
+
+[main]
 api_key = "REEMPLAZA_CON_TU_API_KEY"
+people_conf = "main_people.toml"
+
+[phone]
+api_key = "REEMPLAZA_CON_TU_API_KEY"
+people_conf = "phone_people.toml"
+
+[art]
+api_key = "KEY_DEL_USUARIO_ART"
+people_conf = "art_people.toml"
+
+[nsfw]
+api_key = "KEY_DEL_USUARIO_NSFW"
+people_conf = "nsfw_people.toml"
+
 
 [name_of_holo_instance]
 name = "HoloDisplay"
@@ -37,15 +56,13 @@ transition_ms = 700
 
 [search]
 # modes soportados: person, smart, memories, random
+# (para usar la biblioteca art o nsfw, cambia immich.active_user)
 mode = "random"
 # si mode = "smart", descomenta y ajusta esta linea:
 # smart_query = "beach"
 default_people = ["Jesus"]
 search_size = 1000
 seen_buffer_size = 100
-
-[art]
-# api_key = "KEY_DEL_USUARIO_ART"
 
 [immediate_actions]
 next = 0
